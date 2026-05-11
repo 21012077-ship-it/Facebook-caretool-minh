@@ -1,0 +1,1458 @@
+[
+    {
+        "account": "Test",
+        "action": "care_feed_scroll",
+        "duration_minutes": 15,
+        "start_time": "07/05/2026 16:22",
+        "status": "running"
+    },
+    {
+        "account": "Test",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 16:35",
+        "status": "done",
+        "end_time": "07/05/2026 16:46"
+    },
+    {
+        "account": "Test",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 16:57",
+        "status": "running"
+    },
+    {
+        "account": "Test",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 16:57",
+        "status": "error",
+        "error": "'module' object is not callable"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 16:58",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 16:58",
+        "status": "error",
+        "error": "'module' object is not callable"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 17:01",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 17:01",
+        "status": "error",
+        "error": "module 'playwright_stealth' has no attribute 'stealth_sync'"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 17:05",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 17:05",
+        "status": "error",
+        "error": "'module' object is not callable"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 17:08",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 17:08",
+        "status": "error",
+        "error": "'module' object is not callable"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 17:15",
+        "status": "done",
+        "end_time": "07/05/2026 17:25"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 20:56",
+        "status": "done",
+        "end_time": "07/05/2026 21:06"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "07/05/2026 20:56",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "07/05/2026 20:56",
+        "status": "error",
+        "error": "Page.goto: Target page, context or browser has been closed\nCall log:\n  - navigating to \"https://www.facebook.com/\", waiting until \"domcontentloaded\"\n"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 09:32",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "08/05/2026 09:33",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed"
+    },
+    {
+        "time": "09:44:16 08/05/2026",
+        "name": "Tuấn Minh",
+        "action": "Khởi tạo",
+        "status": "Running",
+        "detail": "Mode: care"
+    },
+    {
+        "time": "09:44:20 08/05/2026",
+        "name": "Tuấn Minh",
+        "action": "Newsfeed",
+        "status": "In Progress",
+        "detail": "5 phút"
+    },
+    {
+        "time": "14:41:05",
+        "name": "Tuấn Minh",
+        "action": "Khởi chạy",
+        "status": "Running",
+        "msg": "Chế độ: care"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 14:57",
+        "status": "running"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 14:57",
+        "status": "running"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "time": "08/05/2026 15:06",
+        "status": "error",
+        "error": "Keyboard.press: Target page, context or browser has been closed"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 15:07",
+        "status": "running"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 15:07",
+        "status": "running"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "time": "08/05/2026 15:17",
+        "status": "error",
+        "error": "Keyboard.press: Target page, context or browser has been closed"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "time": "08/05/2026 15:17",
+        "status": "error",
+        "error": "Keyboard.press: Target page, context or browser has been closed"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 15:17",
+        "status": "done",
+        "end_time": "08/05/2026 15:28"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "newsfeed_minutes": 5,
+        "reels_minutes": 5,
+        "pause_range": "4-9",
+        "start_time": "08/05/2026 15:17",
+        "status": "done",
+        "end_time": "08/05/2026 15:28"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "08/05/2026 15:45"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "08/05/2026 20:04"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 09:49",
+        "end_time": "09/05/2026 10:00"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:01"
+    },
+    {
+        "account": "Tuấn Minh",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 10:01"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:01"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:15"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Page.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"button[name=\\\"login\\\"]\")\n    - waiting for\" https://www.facebook.com/two_step_verification/two_factor/?encrypted_context=AWS22LOAd-BzuWpHbF1HICeS5C0vxawb162H4EMBGOLKV7M2yWY2nIAAWj9ELNx6nT_sMIL5n5KoDChsjLxotPHSPjgwVlMDS8-FJr8QYszqDwSJpckBoGZgSD…\" navigation to finish...\n    - navigated to \"https://www.facebook.com/two_step_verification/two_factor/?encrypted_context=AWS22LOAd-BzuWpHbF1HICeS5C0vxawb162H4EMBGOLKV7M2yWY2nIAAWj9ELNx6nT_sMIL5n5KoDChsjLxotPHSPjgwVlMDS8-FJr8QYszqDwSJpckBoGZgSD…\"\n",
+        "time": "09/05/2026 10:16"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:18"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"button[name=\\\"login\\\"], button[id=\\\"loginbutton\\\"]\").first\n",
+        "time": "09/05/2026 10:19"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:20"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 10:20"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:24"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 10:25"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:27"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 10:28"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:29"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 10:30"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 10:31"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 10:32"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 10:32",
+        "end_time": "09/05/2026 10:42"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:23"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:24"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:26"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:27"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:28"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Page.goto: Target page, context or browser has been closed\nCall log:\n  - navigating to \"https://m.facebook.com/\", waiting until \"domcontentloaded\"\n",
+        "time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Page.goto: Target page, context or browser has been closed\nCall log:\n  - navigating to \"https://m.facebook.com/\", waiting until \"domcontentloaded\"\n",
+        "time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:30"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:31"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:31"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:32"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:32"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:32"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:32"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61580916015637",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:33"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:34"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:34"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:36"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA).",
+        "time": "09/05/2026 15:37"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:39"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:39"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:39"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:39"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:40"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:43"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!",
+        "time": "09/05/2026 15:43"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:43"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!",
+        "time": "09/05/2026 15:44"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 15:50",
+        "end_time": "09/05/2026 16:01"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "09/05/2026 15:50"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 15:50",
+        "end_time": "09/05/2026 16:01"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 15:50",
+        "end_time": "09/05/2026 16:01"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "09/05/2026 15:51"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 17:46",
+        "end_time": "09/05/2026 17:57"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:14",
+        "end_time": "09/05/2026 22:25"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:14",
+        "end_time": "09/05/2026 22:25"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:14",
+        "end_time": "09/05/2026 22:25"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:14",
+        "end_time": "09/05/2026 22:25"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:30",
+        "end_time": "09/05/2026 22:41"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:47",
+        "end_time": "09/05/2026 23:08"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:47",
+        "end_time": "09/05/2026 23:08"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:47",
+        "end_time": "09/05/2026 23:08"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:47",
+        "end_time": "09/05/2026 23:08"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "09/05/2026 22:47",
+        "end_time": "09/05/2026 23:08"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:03",
+        "end_time": "10/05/2026 07:14"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:03",
+        "end_time": "10/05/2026 07:14"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:03",
+        "end_time": "10/05/2026 07:14"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:03",
+        "end_time": "10/05/2026 07:14"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:03",
+        "end_time": "10/05/2026 07:14"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:17",
+        "end_time": "10/05/2026 07:37"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:17",
+        "end_time": "10/05/2026 07:37"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:17",
+        "end_time": "10/05/2026 07:37"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:17",
+        "end_time": "10/05/2026 07:37"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:17",
+        "end_time": "10/05/2026 07:37"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:59",
+        "end_time": "10/05/2026 08:20"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:59",
+        "end_time": "10/05/2026 08:20"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:59",
+        "end_time": "10/05/2026 08:20"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:59",
+        "end_time": "10/05/2026 08:20"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 07:59",
+        "end_time": "10/05/2026 08:20"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:11",
+        "end_time": "10/05/2026 09:32"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:11",
+        "end_time": "10/05/2026 09:32"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:11",
+        "end_time": "10/05/2026 09:32"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:11",
+        "end_time": "10/05/2026 09:32"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:11",
+        "end_time": "10/05/2026 09:32"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:43",
+        "end_time": "10/05/2026 10:04"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:43",
+        "end_time": "10/05/2026 10:04"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:43",
+        "end_time": "10/05/2026 10:04"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:43",
+        "end_time": "10/05/2026 10:04"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 09:43",
+        "end_time": "10/05/2026 10:04"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:11"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:11"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:11"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:11"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:11"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:15"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:15"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:15"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:15"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 11:15"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 11:18"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 11:18"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 11:18"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 11:18"
+    },
+    {
+        "account": "61580916015637",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 11:18"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 13:00"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 13:01",
+        "end_time": "10/05/2026 13:11"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 13:01"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:54"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:55"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:55"
+    },
+    {
+        "account": "Tuấn Minh",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:55"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:55"
+    },
+    {
+        "account": "61580916015637",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:56"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 16:56"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:56"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 16:58"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 17:00"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 17:01"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Locator.is_hidden: Target page, context or browser has been closed",
+        "time": "10/05/2026 17:01"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 17:01"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "10/05/2026 17:06"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 17:07"
+    },
+    {
+        "account": "Tuấn Minh",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:09",
+        "end_time": "10/05/2026 17:20"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:20",
+        "end_time": "10/05/2026 18:01"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:20",
+        "end_time": "10/05/2026 18:01"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:20",
+        "end_time": "10/05/2026 18:01"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:20",
+        "end_time": "10/05/2026 18:01"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 17:20",
+        "end_time": "10/05/2026 18:01"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 18:10"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 18:10"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 18:10"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 18:10"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "10/05/2026 18:10"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Connection closed while reading from the driver",
+        "time": "10/05/2026 18:11"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 21:37",
+        "end_time": "10/05/2026 21:48"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 21:37",
+        "end_time": "10/05/2026 21:48"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 21:37",
+        "end_time": "10/05/2026 21:48"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 21:37",
+        "end_time": "10/05/2026 21:48"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "10/05/2026 21:37",
+        "end_time": "10/05/2026 21:48"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "11/05/2026 08:52",
+        "end_time": "11/05/2026 09:32"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "11/05/2026 08:52",
+        "end_time": "11/05/2026 09:32"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "11/05/2026 08:52",
+        "end_time": "11/05/2026 09:32"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "11/05/2026 08:52",
+        "end_time": "11/05/2026 09:32"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "done",
+        "start_time": "11/05/2026 08:52",
+        "end_time": "11/05/2026 09:32"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:38"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:38"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:38"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:38"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:38"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:48"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:48"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:48"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:48"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 09:48"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 10:03"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 10:03"
+    },
+    {
+        "account": "61580916015637",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 10:03"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 10:03"
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 10:03"
+    },
+    {
+        "account": "61581235765384",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61580957196279",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61580916015637",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61580960439577",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61581126811808",
+        "action": "care_newsfeed_reels",
+        "status": "running",
+        "start_time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61581126811808",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 14:47"
+    },
+    {
+        "account": "61580916015637",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 14:48"
+    },
+    {
+        "account": "61580960439577",
+        "status": "error",
+        "error": "Mouse.wheel: Target page, context or browser has been closed",
+        "time": "11/05/2026 14:48"
+    }
+]

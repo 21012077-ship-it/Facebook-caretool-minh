@@ -1,0 +1,6 @@
+2026/05/08-14:44:11.514 2704 Creating DB C:\Users\Admin\Desktop\Workspace\Facebook-Account\fb_profiles\Tuấn Minh\Default\IndexedDB\https_www.facebook.com_0.indexeddb.leveldb since it was missing.
+2026/05/08-14:44:11.522 2704 Reusing MANIFEST C:\Users\Admin\Desktop\Workspace\Facebook-Account\fb_profiles\Tuấn Minh\Default\IndexedDB\https_www.facebook.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/05/08-14:44:12.150 8ff4 Level-0 table #5: started
+2026/05/08-14:44:12.153 8ff4 Level-0 table #5: 21012 bytes OK
+2026/05/08-14:44:12.154 8ff4 Delete type=0 #3
+2026/05/08-14:44:12.155 2704 Manual compaction at level-0 from '\x00\x09\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x0a\x00\x00\x00' @ 0 : 0; will stop at (end)

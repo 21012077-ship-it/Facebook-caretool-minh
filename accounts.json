@@ -1,0 +1,76 @@
+[
+    {
+        "name": "Tuấn Minh",
+        "status": "active",
+        "note": "",
+        "cookie_file": "C:/Users/Admin/Downloads/www.facebook.com_07-05-2026 (1).json",
+        "created_at": "07/05/2026 16:58",
+        "last_open": "Chưa mở",
+        "last_care": "10/05/2026 17:09"
+    },
+    {
+        "name": "61581235765384",
+        "uid": "",
+        "password": "",
+        "two_fa": "",
+        "status": "active",
+        "note": "",
+        "proxy": "160.30.191.16:11599:muaproxy6a000705811f0:6Uhyv67Dbb80UaVU",
+        "cookie_file": "cookies\\61581235765384.json",
+        "created_at": "09/05/2026 10:15",
+        "last_open": "11/05/2026 10:25",
+        "last_care": "11/05/2026 14:47"
+    },
+    {
+        "name": "61580957196279",
+        "uid": "61580957196279",
+        "password": "Clonetruss5675",
+        "two_fa": "HY5LMPGKDHFST3WLJRF2N4YGQN4KUJJF",
+        "status": "active",
+        "note": "",
+        "proxy": "",
+        "cookie_file": "cookies\\61580957196279.json",
+        "created_at": "09/05/2026 15:30",
+        "last_open": "11/05/2026 10:25",
+        "last_care": "11/05/2026 14:47"
+    },
+    {
+        "name": "61581126811808",
+        "uid": "61581126811808",
+        "password": "Clonetruss0645",
+        "two_fa": "S2SKYX2MNQMCHQCGK6DGNAH745MQEKTJ",
+        "status": "active",
+        "note": "",
+        "proxy": "",
+        "cookie_file": "cookies\\61581126811808.json",
+        "created_at": "09/05/2026 15:30",
+        "last_open": "Chưa mở",
+        "last_care": "11/05/2026 14:47"
+    },
+    {
+        "name": "61580916015637",
+        "uid": "61580916015637",
+        "password": "Clonetruss3642",
+        "two_fa": "YHOZOPCRBITRBWQ67ZUTGJ6MFSWG6SSZ",
+        "status": "active",
+        "note": "",
+        "proxy": "",
+        "cookie_file": "cookies\\61580916015637.json",
+        "created_at": "09/05/2026 15:30",
+        "last_open": "Chưa mở",
+        "last_care": "11/05/2026 14:47"
+    },
+    {
+        "name": "61580960439577",
+        "uid": "",
+        "password": "",
+        "two_fa": "",
+        "status": "active",
+        "note": "",
+        "proxy": "",
+        "cookie_file": "C:/Users/Admin/Downloads/www.facebook.com_09-05-2026 (2).json",
+        "created_at": "09/05/2026 15:44",
+        "last_open": "10/05/2026 08:40",
+        "last_care": "11/05/2026 14:47"
+    }
+]

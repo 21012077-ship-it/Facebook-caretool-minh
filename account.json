@@ -1,0 +1,16 @@
+[
+  {
+    "id": "acc_001",
+    "name": "Facebook 1",
+    "cookie_file": "cookies/account_1.json",
+    "note": "Tài khoản chính",
+    "status": "active"
+  },
+  {
+    "id": "acc_002",
+    "name": "Facebook 2",
+    "cookie_file": "cookies/account_2.json",
+    "note": "Tài khoản phụ",
+    "status": "active"
+  }
+]
