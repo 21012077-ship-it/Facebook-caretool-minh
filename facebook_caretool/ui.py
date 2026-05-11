@@ -267,9 +267,11 @@ class FacebookCareTool(ctk.CTk):
         self.live_log_text.configure(state="disabled")
 
         # KHU VỰC PHẢI MÀN NUÔI (Chi tiết chăm sóc)
-        self.detail = ctk.CTkFrame(self.view_care, width=340, corner_radius=0)
+        # Dùng scrollable frame để phần thông tin/cài đặt vẫn xem được hết khi chọn tài khoản
+        # có nội dung gợi ý dài hoặc khi cửa sổ bị thu nhỏ chiều cao.
+        self.detail = ctk.CTkScrollableFrame(self.view_care, width=340, corner_radius=0)
         self.detail.grid(row=0, column=1, sticky="nsew")
-        self.detail.grid_propagate(False)
+        self.detail.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(self.detail, text="Thông tin chăm sóc", font=("Arial", 20, "bold")).pack(pady=(20, 10), padx=20, anchor="w")
 
@@ -279,7 +281,7 @@ class FacebookCareTool(ctk.CTk):
         self.detail_name = ctk.CTkLabel(self.detail_box, text="Chưa chọn tài khoản", font=("Arial", 18, "bold"))
         self.detail_name.pack(pady=(18, 5))
 
-        self.detail_info = ctk.CTkLabel(self.detail_box, text="", justify="left", anchor="w")
+        self.detail_info = ctk.CTkLabel(self.detail_box, text="", justify="left", anchor="w", wraplength=280)
         self.detail_info.pack(fill="x", padx=20, pady=12)
 
         self.settings_box = ctk.CTkFrame(self.detail)
