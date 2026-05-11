@@ -1010,9 +1010,35 @@ class FacebookCareTool(ctk.CTk):
 
     # --- CÁC HÀM TIỆN ÍCH CHUNG ---
     def configure_table_columns(self, frame):
-        widths = [42, 170, 170, 115, 145, 150, 200, 150]
+        widths = [42, 170, 170, 115, 185, 150, 200, 150]
         for col, width in enumerate(widths):
             frame.grid_columnconfigure(col, minsize=width, weight=1 if col in (1, 2, 6) else 0)
+
+    def get_care_profile_menu_values(self):
+        return list(CARE_PROFILE_LABELS.values())
+
+    def get_care_profile_key_from_label(self, label):
+        for profile_key, profile_text in CARE_PROFILE_LABELS.items():
+            if profile_text == label:
+                return profile_key
+        return "auto"
+
+    def update_account_care_profile(self, index, selected_label):
+        if index < 0 or index >= len(self.accounts):
+            return
+
+        profile_key = self.get_care_profile_key_from_label(selected_label)
+        self.accounts[index]["care_profile"] = profile_key
+        self.save_accounts()
+
+        if self.selected_index == index:
+            self.select_account(index)
+        else:
+            self.refresh_selected_account_plan()
+
+        self.append_live_log(
+            f"[{self.accounts[index].get('name', 'Không tên')}] Đổi kiểu nuôi: {profile_label(profile_key)}"
+        )
 
     def dashboard_card(self, parent, title, value, color, col):
         card = ctk.CTkFrame(parent, fg_color=color, corner_radius=14)
@@ -1129,7 +1155,20 @@ class FacebookCareTool(ctk.CTk):
             corner_radius=8, padx=10, pady=5
         ).grid(row=0, column=3, sticky="w", padx=8, pady=10)
 
-        ctk.CTkLabel(row_frame, text=profile_label(acc.get("care_profile")), text_color="#a7f3d0", anchor="w").grid(row=0, column=4, sticky="ew", padx=8, pady=10)
+        profile_var = ctk.StringVar(value=profile_label(acc.get("care_profile")))
+        profile_menu = ctk.CTkOptionMenu(
+            row_frame,
+            values=self.get_care_profile_menu_values(),
+            variable=profile_var,
+            width=165,
+            height=30,
+            fg_color="#0f766e",
+            button_color="#115e59",
+            button_hover_color="#134e4a",
+            text_color="#ecfeff",
+            command=lambda selected, idx=index: self.update_account_care_profile(idx, selected),
+        )
+        profile_menu.grid(row=0, column=4, sticky="ew", padx=8, pady=10)
 
         last_touch = acc.get("last_care") or acc.get("last_open") or "Chưa tương tác"
         ctk.CTkLabel(row_frame, text=last_touch, text_color="#9ca3af", anchor="w").grid(row=0, column=5, sticky="ew", padx=8, pady=10)
@@ -1142,7 +1181,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkButton(action_box, text="Chi tiết", width=70, height=30, fg_color="#374151", command=lambda: self.select_account(index)).pack(side="left", padx=3)
 
         for widget in row_frame.winfo_children():
-            if widget is not checkbox and widget is not action_box:
+            if widget is not checkbox and widget is not action_box and widget is not profile_menu:
                 widget.bind("<Button-1>", lambda e, idx=index: self.select_account(idx))
 
     def toggle_account_selection(self, index, checked):
