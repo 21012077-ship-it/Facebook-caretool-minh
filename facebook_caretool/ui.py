@@ -2,6 +2,8 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from playwright.sync_api import sync_playwright
 
+from .account_io import backup_accounts_file, load_import_accounts, merge_accounts, save_export_file
+from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .storage import JsonStorage
 from .utils import load_json, random_delay, save_json, spin_content
@@ -39,7 +41,7 @@ class FacebookCareTool(ctk.CTk):
         super().__init__()
 
         self.title("Facebook Account Care Tool & Automation")
-        self.geometry("1300x750")
+        self.geometry("1400x820")
         self.minsize(1200, 700)
 
         self.storage = JsonStorage(ACCOUNTS_FILE, LOGS_FILE)
@@ -53,6 +55,13 @@ class FacebookCareTool(ctk.CTk):
         self.task_pause_event = threading.Event()
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
+        self.browser_selected_index = None
+        self.app_settings = self.load_json("settings.json", {
+            "appearance": "dark",
+            "default_home_url": "https://www.facebook.com/",
+            "export_sensitive_default": False,
+            "import_overwrite_default": False,
+        })
 
         self.build_ui()
         self.refresh_accounts()
@@ -93,9 +102,9 @@ class FacebookCareTool(ctk.CTk):
         self.menu_buttons = {}
         self.menu_buttons["care"] = self.create_menu_btn("Nuôi tài khoản", lambda: self.switch_view("care"))
         self.menu_buttons["comment"] = self.create_menu_btn("Cấu hình Comment", lambda: self.switch_view("comment"))
-        self.create_menu_btn("Trình duyệt", None)
-        self.create_menu_btn("Lịch sử nuôi", None)
-        self.create_menu_btn("Cài đặt", None)
+        self.menu_buttons["browser"] = self.create_menu_btn("Trình duyệt", lambda: self.switch_view("browser"))
+        self.menu_buttons["history"] = self.create_menu_btn("Lịch sử nuôi", lambda: self.switch_view("history"))
+        self.menu_buttons["settings"] = self.create_menu_btn("Cài đặt", lambda: self.switch_view("settings"))
 
         self.sidebar_stats = ctk.CTkFrame(self.sidebar)
         self.sidebar_stats.pack(side="bottom", fill="x", padx=15, pady=20)
@@ -116,9 +125,15 @@ class FacebookCareTool(ctk.CTk):
         # TẠO CÁC MÀN HÌNH (VIEWS)
         self.view_care = ctk.CTkFrame(self.main_container, corner_radius=0, fg_color="#0f172a")
         self.view_comment = ctk.CTkFrame(self.main_container, corner_radius=0, fg_color="#0f172a")
+        self.view_browser = ctk.CTkFrame(self.main_container, corner_radius=0, fg_color="#0f172a")
+        self.view_history = ctk.CTkFrame(self.main_container, corner_radius=0, fg_color="#0f172a")
+        self.view_settings = ctk.CTkFrame(self.main_container, corner_radius=0, fg_color="#0f172a")
 
         self.build_view_care()
         self.build_view_comment()
+        self.build_view_browser()
+        self.build_view_history()
+        self.build_view_settings()
 
         # Mặc định mở màn hình Nuôi tài khoản
         self.switch_view("care")
@@ -140,13 +155,22 @@ class FacebookCareTool(ctk.CTk):
         for key, btn in self.menu_buttons.items():
             btn.configure(fg_color="#2563eb" if key == view_name else "transparent")
 
+        for view in (self.view_care, self.view_comment, self.view_browser, self.view_history, self.view_settings):
+            view.grid_forget()
+
         if view_name == "care":
-            self.view_comment.grid_forget()
             self.view_care.grid(row=0, column=0, sticky="nsew")
         elif view_name == "comment":
-            self.view_care.grid_forget()
             self.refresh_comment_accounts()
             self.view_comment.grid(row=0, column=0, sticky="nsew")
+        elif view_name == "browser":
+            self.refresh_browser_accounts()
+            self.view_browser.grid(row=0, column=0, sticky="nsew")
+        elif view_name == "history":
+            self.refresh_history_view()
+            self.view_history.grid(row=0, column=0, sticky="nsew")
+        elif view_name == "settings":
+            self.view_settings.grid(row=0, column=0, sticky="nsew")
 
     # --- MÀN HÌNH 1: NUÔI TÀI KHOẢN ---
     def build_view_care(self):
@@ -406,6 +430,128 @@ class FacebookCareTool(ctk.CTk):
         self.comment_pause_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
         ctk.CTkButton(comment_control_row, text="⏹ Dừng", height=40, fg_color="#991b1b", hover_color="#7f1d1d", command=self.stop_task).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
+    # --- MÀN HÌNH 3: TRÌNH DUYỆT ---
+    def build_view_browser(self):
+        self.view_browser.grid_columnconfigure(0, weight=1)
+        self.view_browser.grid_columnconfigure(1, weight=0)
+        self.view_browser.grid_rowconfigure(1, weight=1)
+
+        header = ctk.CTkFrame(self.view_browser, fg_color="transparent")
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=25, pady=(25, 10))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header, text="Trình duyệt tài khoản", font=("Arial", 28, "bold")).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(header, text="Làm mới danh sách", width=150, fg_color="#374151", command=self.refresh_browser_accounts).grid(row=0, column=1)
+
+        left = ctk.CTkFrame(self.view_browser, fg_color="#111827", corner_radius=15)
+        left.grid(row=1, column=0, sticky="nsew", padx=(25, 10), pady=(5, 25))
+        left.grid_columnconfigure(0, weight=1)
+        left.grid_rowconfigure(1, weight=1)
+        ctk.CTkLabel(left, text="Chọn account để mở bằng profile/cookie riêng", font=("Arial", 16, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=15, pady=(15, 8))
+        self.browser_accounts_scroll = ctk.CTkScrollableFrame(left, fg_color="#0f172a", corner_radius=10)
+        self.browser_accounts_scroll.grid(row=1, column=0, sticky="nsew", padx=15, pady=(0, 15))
+
+        right = ctk.CTkFrame(self.view_browser, width=360, corner_radius=0)
+        right.grid(row=1, column=1, sticky="nsew")
+        right.grid_propagate(False)
+        ctk.CTkLabel(right, text="Điều khiển trình duyệt", font=("Arial", 20, "bold"), anchor="w").pack(fill="x", padx=20, pady=(22, 12))
+        self.browser_selected_label = ctk.CTkLabel(right, text="Chưa chọn tài khoản", wraplength=300, justify="left")
+        self.browser_selected_label.pack(fill="x", padx=20, pady=(0, 15))
+
+        ctk.CTkLabel(right, text="URL mở nhanh", anchor="w").pack(fill="x", padx=20)
+        self.browser_url_entry = ctk.CTkEntry(right)
+        self.browser_url_entry.pack(fill="x", padx=20, pady=(4, 12))
+        self.browser_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
+
+        ctk.CTkButton(right, text="🌐 Mở URL", height=42, fg_color="#2563eb", command=self.open_browser_selected_url).pack(fill="x", padx=20, pady=6)
+        ctk.CTkButton(right, text="🏠 Facebook Home", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/")).pack(fill="x", padx=20, pady=6)
+        ctk.CTkButton(right, text="🎬 Reels", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/reel/")).pack(fill="x", padx=20, pady=6)
+        ctk.CTkButton(right, text="💬 Messenger", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/messages/")).pack(fill="x", padx=20, pady=6)
+        ctk.CTkLabel(right, text="Cookie sống sẽ được kiểm tra qua ensure_login; nếu cookie die và có UID/Pass/2FA, tool sẽ tự đăng nhập và lưu lại cookie mới.", text_color="#9ca3af", wraplength=300, justify="left").pack(fill="x", padx=20, pady=(18, 0))
+
+    # --- MÀN HÌNH 4: LỊCH SỬ NUÔI + DASHBOARD ---
+    def build_view_history(self):
+        self.view_history.grid_columnconfigure(0, weight=1)
+        self.view_history.grid_rowconfigure(3, weight=1)
+
+        header = ctk.CTkFrame(self.view_history, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=25, pady=(25, 10))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header, text="Lịch sử nuôi & Dashboard thống kê", font=("Arial", 28, "bold")).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(header, text="Làm mới", width=110, fg_color="#374151", command=self.refresh_history_view).grid(row=0, column=1, padx=6)
+        ctk.CTkButton(header, text="Xuất CSV", width=110, fg_color="#0d9488", command=self.export_history_csv).grid(row=0, column=2)
+
+        self.history_cards = ctk.CTkFrame(self.view_history, fg_color="transparent")
+        self.history_cards.grid(row=1, column=0, sticky="ew", padx=25, pady=(4, 8))
+        for col in range(4):
+            self.history_cards.grid_columnconfigure(col, weight=1)
+        self.history_total_card = self.dashboard_card(self.history_cards, "Tổng log", "0", "#1e3a8a", 0)
+        self.history_done_card = self.dashboard_card(self.history_cards, "Done", "0", "#14532d", 1)
+        self.history_error_card = self.dashboard_card(self.history_cards, "Error/Die", "0", "#7f1d1d", 2)
+        self.history_today_card = self.dashboard_card(self.history_cards, "Hôm nay", "0", "#78350f", 3)
+
+        filters = ctk.CTkFrame(self.view_history, fg_color="transparent")
+        filters.grid(row=2, column=0, sticky="ew", padx=25, pady=8)
+        ctk.CTkLabel(filters, text="Lọc account/status:").pack(side="left", padx=(0, 8))
+        self.history_filter_entry = ctk.CTkEntry(filters, width=320, placeholder_text="Nhập tên account hoặc trạng thái...")
+        self.history_filter_entry.pack(side="left")
+        self.history_filter_entry.bind("<KeyRelease>", lambda e: self.refresh_history_view())
+
+        body = ctk.CTkFrame(self.view_history, fg_color="transparent")
+        body.grid(row=3, column=0, sticky="nsew", padx=25, pady=(0, 25))
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_columnconfigure(1, weight=0)
+        body.grid_rowconfigure(0, weight=1)
+
+        self.history_scroll = ctk.CTkScrollableFrame(body, fg_color="#111827", corner_radius=15)
+        self.history_scroll.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        summary = ctk.CTkFrame(body, fg_color="#111827", width=360, corner_radius=15)
+        summary.grid(row=0, column=1, sticky="nsew")
+        summary.grid_propagate(False)
+        ctk.CTkLabel(summary, text="Thống kê theo ngày/account/trạng thái", font=("Arial", 16, "bold"), wraplength=310, justify="left").pack(fill="x", padx=15, pady=(15, 8))
+        self.history_summary_text = ctk.CTkTextbox(summary, fg_color="#0f172a", text_color="#d1d5db", wrap="word")
+        self.history_summary_text.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+    # --- MÀN HÌNH 5: CÀI ĐẶT + IMPORT/EXPORT ---
+    def build_view_settings(self):
+        self.view_settings.grid_columnconfigure(0, weight=1)
+        self.view_settings.grid_rowconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.view_settings, text="Cài đặt", font=("Arial", 28, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=25, pady=(25, 10))
+
+        body = ctk.CTkScrollableFrame(self.view_settings, fg_color="transparent")
+        body.grid(row=1, column=0, sticky="nsew", padx=25, pady=(0, 25))
+        body.grid_columnconfigure(0, weight=1)
+
+        general = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
+        general.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        ctk.CTkLabel(general, text="Thiết lập chung", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 10))
+        ctk.CTkLabel(general, text="URL mặc định khi mở Trình duyệt", anchor="w").pack(fill="x", padx=18)
+        self.default_url_entry = ctk.CTkEntry(general)
+        self.default_url_entry.pack(fill="x", padx=18, pady=(4, 12))
+        self.default_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
+        ctk.CTkButton(general, text="Lưu cài đặt", width=140, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(0, 16))
+
+        io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
+        io_frame.grid(row=1, column=0, sticky="ew", pady=12)
+        ctk.CTkLabel(io_frame, text="Import / Export account an toàn", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
+        ctk.CTkLabel(io_frame, text="Export mặc định sẽ bỏ password và mã 2FA. Chỉ bật tùy chọn bên dưới khi bạn thật sự cần sao lưu đầy đủ vào nơi an toàn.", text_color="#fbbf24", wraplength=850, justify="left").pack(fill="x", padx=18, pady=(0, 10))
+        self.export_sensitive_var = ctk.BooleanVar(value=bool(self.app_settings.get("export_sensitive_default", False)))
+        ctk.CTkCheckBox(io_frame, text="Bao gồm password và 2FA trong file export", variable=self.export_sensitive_var).pack(anchor="w", padx=18, pady=4)
+        self.import_overwrite_var = ctk.BooleanVar(value=bool(self.app_settings.get("import_overwrite_default", False)))
+        ctk.CTkCheckBox(io_frame, text="Khi import, ghi đè account trùng UID/tên", variable=self.import_overwrite_var).pack(anchor="w", padx=18, pady=4)
+        action_row = ctk.CTkFrame(io_frame, fg_color="transparent")
+        action_row.pack(fill="x", padx=18, pady=(12, 18))
+        ctk.CTkButton(action_row, text="⬇ Export accounts", width=170, fg_color="#0d9488", command=self.export_accounts_safe).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(action_row, text="⬆ Import accounts", width=170, fg_color="#2563eb", command=self.import_accounts_safe).pack(side="left")
+
+        info = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
+        info.grid(row=2, column=0, sticky="ew", pady=12)
+        ctk.CTkLabel(info, text="Dữ liệu", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
+        self.settings_data_label = ctk.CTkLabel(info, text="", justify="left", anchor="w")
+        self.settings_data_label.pack(fill="x", padx=18, pady=(0, 16))
+        self.refresh_settings_info()
+
     # --- CÁC HÀM TIỆN ÍCH DÀNH CHO TAB COMMENT ---
     def refresh_comment_accounts(self):
         for widget in self.cmt_acc_scroll.winfo_children():
@@ -616,6 +762,160 @@ class FacebookCareTool(ctk.CTk):
         else:
             self.after(0, lambda: self.append_live_log("=== 🎉 HOÀN THÀNH CHIẾN DỊCH COMMENT ==="))
             self.after(0, lambda: messagebox.showinfo("Hoàn thành", "Đã chạy xong chiến dịch comment!"))
+
+    # --- LOGIC TRÌNH DUYỆT / LỊCH SỬ / CÀI ĐẶT ---
+    def refresh_browser_accounts(self):
+        if not hasattr(self, "browser_accounts_scroll"):
+            return
+        for widget in self.browser_accounts_scroll.winfo_children():
+            widget.destroy()
+        if not self.accounts:
+            ctk.CTkLabel(self.browser_accounts_scroll, text="Chưa có tài khoản nào.").pack(pady=20)
+            return
+        for index, acc in enumerate(self.accounts):
+            row = ctk.CTkFrame(self.browser_accounts_scroll, fg_color="#1f2937" if index != self.browser_selected_index else "#263244", corner_radius=10)
+            row.pack(fill="x", padx=4, pady=4)
+            row.grid_columnconfigure(0, weight=1)
+            title = f"{acc.get('name', 'Không tên')}  •  {self.status_text(acc.get('status', 'active'))}"
+            ctk.CTkLabel(row, text=title, font=("Arial", 14, "bold"), anchor="w").grid(row=0, column=0, sticky="ew", padx=12, pady=(8, 0))
+            subtitle = f"Proxy: {acc.get('proxy') or 'Không dùng'} | Cookie: {os.path.basename(acc.get('cookie_file', '')) or 'Tự tạo khi login'}"
+            ctk.CTkLabel(row, text=subtitle, text_color="#9ca3af", anchor="w").grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+            ctk.CTkButton(row, text="Chọn", width=70, command=lambda idx=index: self.select_browser_account(idx)).grid(row=0, column=1, rowspan=2, padx=12, pady=8)
+
+    def select_browser_account(self, index):
+        self.browser_selected_index = index
+        account = self.accounts[index]
+        self.browser_selected_label.configure(
+            text=f"Đang chọn: {account.get('name', 'Không tên')}\nTrạng thái: {self.status_text(account.get('status', 'active'))}\nProxy: {account.get('proxy') or 'Không dùng'}"
+        )
+        self.refresh_browser_accounts()
+
+    def open_browser_selected_url(self, url=None):
+        if self.browser_selected_index is None:
+            messagebox.showwarning("Thông báo", "Hãy chọn tài khoản ở màn Trình duyệt trước.")
+            return
+        target_url = url or self.browser_url_entry.get().strip() or self.app_settings.get("default_home_url", "https://www.facebook.com/")
+        account = self.accounts[self.browser_selected_index]
+        account["last_open"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+        self.save_accounts()
+        self.refresh_accounts()
+        self.refresh_browser_accounts()
+        threading.Thread(target=self.open_browser, args=(account, target_url), daemon=True).start()
+
+    def refresh_history_view(self):
+        if not hasattr(self, "history_scroll"):
+            return
+        self.logs = self.storage.load_logs()
+        summary = summarize_logs(self.logs)
+        account_summary = summarize_accounts(self.accounts)
+        status_counts = summary["by_status"]
+        today_label = datetime.now().strftime("%d/%m/%Y")
+        self.history_total_card.configure(text=str(summary["total"]))
+        self.history_done_card.configure(text=str(status_counts.get("done", 0)))
+        self.history_error_card.configure(text=str(status_counts.get("error", 0) + status_counts.get("cookie_error", 0)))
+        self.history_today_card.configure(text=str(summary["by_day"].get(today_label, 0)))
+
+        filter_text = self.history_filter_entry.get().strip().lower() if hasattr(self, "history_filter_entry") else ""
+        for widget in self.history_scroll.winfo_children():
+            widget.destroy()
+
+        logs = summary["latest"]
+        if filter_text:
+            logs = [log for log in logs if filter_text in str(log.get("account", "")).lower() or filter_text in str(log.get("status", "")).lower()]
+
+        if not logs:
+            ctk.CTkLabel(self.history_scroll, text="Chưa có lịch sử phù hợp.", font=("Arial", 16)).pack(pady=30)
+        for log in logs:
+            self.history_log_row(log)
+
+        text = [
+            "TÀI KHOẢN HIỆN TẠI",
+            f"- Tổng: {account_summary['total']}",
+            f"- Live: {account_summary['active']}",
+            f"- Checkpoint: {account_summary['checkpoint']}",
+            f"- Die: {account_summary['cookie_error']}",
+            "",
+            "THEO TRẠNG THÁI LOG",
+        ]
+        text.extend(f"- {status}: {count}" for status, count in sorted(summary["by_status"].items()))
+        text.extend(["", "THEO NGÀY"])
+        text.extend(f"- {day}: {count}" for day, count in sorted(summary["by_day"].items(), reverse=True)[:20])
+        text.extend(["", "TOP ACCOUNT"])
+        text.extend(f"- {account}: {count}" for account, count in sorted(summary["by_account"].items(), key=lambda item: item[1], reverse=True)[:20])
+        self.history_summary_text.configure(state="normal")
+        self.history_summary_text.delete("1.0", "end")
+        self.history_summary_text.insert("end", "\n".join(text))
+        self.history_summary_text.configure(state="disabled")
+
+    def history_log_row(self, log):
+        row = ctk.CTkFrame(self.history_scroll, fg_color="#1f2937", corner_radius=10)
+        row.pack(fill="x", padx=10, pady=5)
+        row.grid_columnconfigure(1, weight=1)
+        status = log.get("status", "unknown")
+        color = "#16a34a" if status == "done" else "#dc2626" if status in ("error", "cookie_error") else "#d97706" if status == "stopped" else "#475569"
+        ctk.CTkLabel(row, text=status, fg_color=color, corner_radius=8, padx=10, pady=5).grid(row=0, column=0, rowspan=2, padx=10, pady=10, sticky="w")
+        title = f"{log.get('account', 'Không tên')} • {log.get('action', 'care')}"
+        ctk.CTkLabel(row, text=title, font=("Arial", 14, "bold"), anchor="w").grid(row=0, column=1, sticky="ew", padx=8, pady=(8, 0))
+        time_text = log.get("start_time") or log.get("time") or "Không rõ thời gian"
+        if log.get("end_time"):
+            time_text += f" → {log.get('end_time')}"
+        if log.get("error"):
+            time_text += f" | Lỗi: {log.get('error')}"
+        ctk.CTkLabel(row, text=time_text, text_color="#9ca3af", anchor="w", wraplength=850).grid(row=1, column=1, sticky="ew", padx=8, pady=(0, 8))
+
+    def export_history_csv(self):
+        path = filedialog.asksaveasfilename(title="Xuất lịch sử CSV", defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
+        if not path:
+            return
+        import csv
+        fields = ["account", "status", "action", "start_time", "end_time", "time", "error"]
+        with open(path, "w", newline="", encoding="utf-8-sig") as file:
+            writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(self.logs)
+        messagebox.showinfo("Thành công", f"Đã xuất lịch sử: {path}")
+
+    def refresh_settings_info(self):
+        if hasattr(self, "settings_data_label"):
+            self.settings_data_label.configure(text=f"Accounts file: {ACCOUNTS_FILE}\nLogs file: {LOGS_FILE}\nTổng account: {len(self.accounts)}\nTổng log: {len(self.logs)}")
+
+    def save_app_settings(self):
+        self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
+        self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
+        self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
+        self.save_json("settings.json", self.app_settings)
+        if hasattr(self, "browser_url_entry"):
+            self.browser_url_entry.delete(0, "end")
+            self.browser_url_entry.insert(0, self.app_settings["default_home_url"])
+        messagebox.showinfo("Đã lưu", "Đã lưu cài đặt.")
+
+    def export_accounts_safe(self):
+        include_sensitive = self.export_sensitive_var.get()
+        if include_sensitive and not messagebox.askyesno("Xác nhận bảo mật", "File export sẽ chứa password và 2FA. Chỉ lưu ở nơi an toàn. Tiếp tục?"):
+            return
+        path = filedialog.asksaveasfilename(title="Export accounts", defaultextension=".json", filetypes=[("JSON Files", "*.json")])
+        if not path:
+            return
+        save_export_file(path, self.accounts, include_sensitive=include_sensitive)
+        messagebox.showinfo("Thành công", "Đã export account. Mặc định dữ liệu nhạy cảm được loại bỏ nếu bạn không bật tùy chọn.")
+
+    def import_accounts_safe(self):
+        path = filedialog.askopenfilename(title="Import accounts", filetypes=[("JSON Files", "*.json")])
+        if not path:
+            return
+        try:
+            imported = load_import_accounts(path)
+            backup_path = backup_accounts_file(ACCOUNTS_FILE)
+            self.accounts, stats = merge_accounts(self.accounts, imported, overwrite=self.import_overwrite_var.get())
+            self.save_accounts()
+            self.refresh_accounts()
+            self.refresh_comment_accounts()
+            self.refresh_browser_accounts()
+            self.refresh_settings_info()
+            backup_note = f"\nBackup cũ: {backup_path}" if backup_path else ""
+            messagebox.showinfo("Import hoàn tất", f"Thêm: {stats['added']} | Cập nhật: {stats['updated']} | Bỏ qua trùng: {stats['skipped']}{backup_note}")
+        except Exception as exc:
+            messagebox.showerror("Import lỗi", str(exc))
 
     # --- ĐIỀU KHIỂN TASK: PAUSE / STOP ---
     def reset_task_state(self):
@@ -1199,7 +1499,7 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, self.refresh_accounts)
         return True
 
-    def open_browser(self, account):
+    def open_browser(self, account, start_url=None):
         try:
             cookies = self.load_cookies(account)
             with sync_playwright() as p:
@@ -1208,7 +1508,10 @@ class FacebookCareTool(ctk.CTk):
                 # GỌI HÀM KIỂM TRA ĐĂNG NHẬP Ở ĐÂY
                 self.ensure_login(context, page, account)
 
-                self.goto_facebook_home(page, account=account)
+                if start_url:
+                    self.safe_goto(page, start_url, account=account)
+                else:
+                    self.goto_facebook_home(page, account=account)
                 while True: time.sleep(1)
         except Exception as e:
             self.after(0, lambda err=e: messagebox.showerror("Lỗi mở Facebook", str(err)))

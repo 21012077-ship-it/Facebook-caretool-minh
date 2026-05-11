@@ -2,6 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from facebook_caretool.account_io import build_export_payload, merge_accounts, parse_import_payload
+from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
 from facebook_caretool.utils import load_json, parse_delay, parse_proxy, save_json, spin_content
 
@@ -79,6 +81,61 @@ class JsonStorageTest(unittest.TestCase):
 
             self.assertEqual(storage.load_accounts()[0]["name"], "A")
             self.assertEqual(storage.load_logs()[0]["extra"], 1)
+
+
+class AccountImportExportTest(unittest.TestCase):
+    def test_export_payload_redacts_sensitive_fields_by_default(self):
+        payload = build_export_payload([
+            {"name": "A", "uid": "1", "password": "secret", "two_fa": "ABC"}
+        ])
+
+        exported = payload["accounts"][0]
+        self.assertEqual(exported["password"], "")
+        self.assertEqual(exported["two_fa"], "")
+
+    def test_export_payload_can_include_sensitive_fields(self):
+        payload = build_export_payload([
+            {"name": "A", "uid": "1", "password": "secret", "two_fa": "ABC"}
+        ], include_sensitive=True)
+
+        exported = payload["accounts"][0]
+        self.assertEqual(exported["password"], "secret")
+        self.assertEqual(exported["two_fa"], "ABC")
+
+    def test_parse_import_payload_accepts_wrapped_accounts(self):
+        accounts = parse_import_payload({"accounts": [{"name": "A", "status": "active"}]})
+        self.assertEqual(accounts[0]["name"], "A")
+
+    def test_merge_accounts_skips_or_overwrites_duplicates(self):
+        current = [{"name": "A", "uid": "1", "note": "old"}]
+        imported = [{"name": "A new", "uid": "1", "note": "new"}, {"name": "B", "uid": "2"}]
+
+        merged, stats = merge_accounts(current, imported, overwrite=False)
+        self.assertEqual(stats, {"added": 1, "updated": 0, "skipped": 1})
+        self.assertEqual(merged[0]["note"], "old")
+
+        merged, stats = merge_accounts(current, imported, overwrite=True)
+        self.assertEqual(stats, {"added": 1, "updated": 1, "skipped": 0})
+        self.assertEqual(merged[0]["note"], "new")
+
+
+class AnalyticsTest(unittest.TestCase):
+    def test_summarize_accounts_and_logs(self):
+        account_summary = summarize_accounts([
+            {"status": "active"}, {"status": "checkpoint"}, {"status": "cookie_error"}, {}
+        ])
+        self.assertEqual(account_summary["total"], 4)
+        self.assertEqual(account_summary["active"], 2)
+
+        log_summary = summarize_logs([
+            {"account": "A", "status": "done", "start_time": "01/05/2026 10:00"},
+            {"account": "A", "status": "error", "time": "01/05/2026 11:00"},
+            {"account": "B", "status": "done", "time": "02/05/2026 11:00"},
+        ])
+        self.assertEqual(log_summary["total"], 3)
+        self.assertEqual(log_summary["by_day"]["01/05/2026"], 2)
+        self.assertEqual(log_summary["by_account"]["A"], 2)
+        self.assertEqual(log_summary["by_status"]["done"], 2)
 
 
 if __name__ == "__main__":
