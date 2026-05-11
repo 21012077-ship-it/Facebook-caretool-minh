@@ -606,7 +606,7 @@ class FacebookCareTool(ctk.CTk):
                         final_content = re.sub(r'\{([^{}]*)\}', spin, random_line)
 
                         self.after(0, lambda n=acc_name, u=url: self.append_live_log(f"[{n}] Đang vào bài: {u[:40]}..."))
-                        page.goto(url, wait_until="domcontentloaded")
+                        self.safe_goto(page, url, account=account)
                         if not self.interruptible_sleep(random.uniform(4, 7)):
                             break
 
@@ -1114,7 +1114,8 @@ class FacebookCareTool(ctk.CTk):
                 "--disable-extensions",
                 "--disable-features=Translate",
                 "--disable-dev-shm-usage",
-                "--disable-blink-features=AutomationControlled"
+                "--disable-blink-features=AutomationControlled",
+                "--ignore-certificate-errors"
             ]
         }
         if proxy_config:
@@ -1140,6 +1141,65 @@ class FacebookCareTool(ctk.CTk):
 
         return browser, context, page
 
+    def safe_goto(self, page, url, account=None, wait_until="domcontentloaded", timeout=60000, retries=2, fallback_urls=None):
+        """
+        Điều hướng ổn định hơn khi Facebook/proxy trả về ERR_EMPTY_RESPONSE.
+        Thử lại URL hiện tại, sau đó thử domain dự phòng (m/www) trước khi báo lỗi rõ ràng.
+        """
+        urls_to_try = [url]
+        for fallback_url in (fallback_urls or []):
+            if fallback_url and fallback_url not in urls_to_try:
+                urls_to_try.append(fallback_url)
+
+        account_name = (account or {}).get("name") or (account or {}).get("uid") or "Unknown"
+        last_error = None
+
+        for current_url in urls_to_try:
+            for attempt in range(1, retries + 2):
+                try:
+                    return page.goto(current_url, wait_until=wait_until, timeout=timeout)
+                except Exception as e:
+                    last_error = e
+                    error_text = str(e)
+                    is_retryable = any(err in error_text for err in [
+                        "ERR_EMPTY_RESPONSE",
+                        "ERR_CONNECTION_RESET",
+                        "ERR_CONNECTION_CLOSED",
+                        "ERR_TIMED_OUT",
+                        "Timeout"
+                    ])
+
+                    if not is_retryable or attempt > retries:
+                        break
+
+                    wait_seconds = 2 + attempt * 2
+                    self.after(0, lambda n=account_name, u=current_url, a=attempt, w=wait_seconds: self.append_live_log(
+                        f"[{n}] Mạng/proxy chưa trả dữ liệu khi mở {u}. Thử lại lần {a} sau {w}s..."
+                    ))
+                    time.sleep(wait_seconds)
+
+        proxy_text = (account or {}).get("proxy", "") or "không dùng proxy"
+        raise Exception(
+            f"Không mở được Facebook ({last_error}). "
+            f"Nếu đang dùng proxy [{proxy_text}], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+        )
+
+    def goto_facebook_home(self, page, account=None, mobile=False):
+        if mobile:
+            return self.safe_goto(
+                page,
+                "https://m.facebook.com/",
+                account=account,
+                fallback_urls=["https://www.facebook.com/", "https://facebook.com/"]
+            )
+
+        return self.safe_goto(
+            page,
+            "https://www.facebook.com/",
+            account=account,
+            fallback_urls=["https://facebook.com/", "https://m.facebook.com/"]
+        )
+
     # --- HÀM MỚI: KIỂM TRA VÀ TỰ ĐỘNG ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE ---
     def ensure_login(self, context, page, account):
         uid = account.get("uid", "")
@@ -1147,7 +1207,7 @@ class FacebookCareTool(ctk.CTk):
         two_fa = account.get("two_fa", "")
 
         # Vào thử trang chủ FB để check xem cookie có hoạt động không
-        page.goto("https://m.facebook.com/", wait_until="domcontentloaded")
+        self.goto_facebook_home(page, account=account, mobile=True)
         time.sleep(3)
 
         # Nếu không bị đá ra trang đăng nhập/checkpoint/two_step -> Cookie vẫn sống
@@ -1165,7 +1225,7 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, lambda: self.append_live_log(f"[{uid}] Cookie trống/die, đang tự động đăng nhập..."))
 
         if "login" not in page.url:
-            page.goto("https://facebook.com/login/", wait_until="domcontentloaded")
+            self.safe_goto(page, "https://facebook.com/login/", account=account, fallback_urls=["https://www.facebook.com/login/", "https://m.facebook.com/login/"])
             time.sleep(2)
 
         # 1. Điền tài khoản, mật khẩu
@@ -1280,7 +1340,7 @@ class FacebookCareTool(ctk.CTk):
                 # GỌI HÀM KIỂM TRA ĐĂNG NHẬP Ở ĐÂY
                 self.ensure_login(context, page, account)
 
-                page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+                self.goto_facebook_home(page, account=account)
                 while True: time.sleep(1)
         except Exception as e:
             self.after(0, lambda err=e: messagebox.showerror("Lỗi mở Facebook", str(err)))
@@ -1361,12 +1421,12 @@ class FacebookCareTool(ctk.CTk):
                 self.ensure_login(context, page, account)
 
                 if settings["newsfeed_minutes"] > 0 and not self.is_task_stopped():
-                    page.goto("https://www.facebook.com/", wait_until="domcontentloaded")
+                    self.goto_facebook_home(page, account=account)
                     if self.interruptible_sleep(random.uniform(5, 8)):
                         self.scroll_page_for_minutes(page, settings["newsfeed_minutes"], settings["pause_range"], "newsfeed", account.get("name", ""), settings["auto_like"])
 
                 if settings["reels_minutes"] > 0 and not self.is_task_stopped():
-                    page.goto("https://www.facebook.com/reel/", wait_until="domcontentloaded")
+                    self.safe_goto(page, "https://www.facebook.com/reel/", account=account, fallback_urls=["https://facebook.com/reel/", "https://m.facebook.com/reel/"])
                     if self.interruptible_sleep(random.uniform(5, 8)):
                         self.scroll_page_for_minutes(page, settings["reels_minutes"], settings["pause_range"], "reels", account.get("name", ""), settings["auto_like"])
 
