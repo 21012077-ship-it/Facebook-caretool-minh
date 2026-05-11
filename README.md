@@ -8,6 +8,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 
 - Quản lý danh sách account với trạng thái live/checkpoint/die, proxy, ghi chú và thời điểm tương tác.
 - Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng.
+- Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
 - Campaign comment theo danh sách URL, nội dung spin và giới hạn comment theo account.
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
@@ -20,6 +21,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 main.py                         # Entry point chạy app
 facebook_caretool/ui.py          # UI CustomTkinter và điều phối thao tác
 facebook_caretool/automation.py  # Playwright/browser/cookie/proxy
+facebook_caretool/care_planner.py  # Gợi ý kế hoạch nuôi riêng từng account
 facebook_caretool/storage.py     # JSONStorage và SQLiteStorage
 facebook_caretool/account_io.py  # Import/export/merge/backup account
 facebook_caretool/analytics.py   # Tổng hợp dashboard/lịch sử

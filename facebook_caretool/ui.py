@@ -5,6 +5,7 @@ from playwright.sync_api import sync_playwright
 from .account_io import backup_accounts_file, load_import_accounts, merge_accounts, save_export_file
 from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
+from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
 from .utils import load_json, random_delay, save_json, spin_content
 import json
@@ -243,7 +244,7 @@ class FacebookCareTool(ctk.CTk):
         self.table_header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
         self.configure_table_columns(self.table_header)
 
-        headers = ["", "Tên", "Proxy", "Trạng thái", "Lần cuối tương tác", "Ghi chú", "Thao tác"]
+        headers = ["", "Tên", "Proxy", "Trạng thái", "Kiểu nuôi", "Lần cuối tương tác", "Ghi chú", "Thao tác"]
         for col, text in enumerate(headers):
             ctk.CTkLabel(
                 self.table_header, text=text, font=("Arial", 13, "bold"), text_color="#cbd5e1", anchor="w"
@@ -288,21 +289,44 @@ class FacebookCareTool(ctk.CTk):
 
         ctk.CTkLabel(self.settings_box, text="Thời gian lướt Newsfeed", anchor="w").pack(fill="x", padx=15)
         self.newsfeed_minutes_var = ctk.StringVar(value="5")
-        self.newsfeed_menu = ctk.CTkOptionMenu(self.settings_box, values=["0", "1", "3", "5", "10", "15", "20", "30"], variable=self.newsfeed_minutes_var)
+        self.newsfeed_menu = ctk.CTkOptionMenu(self.settings_box, values=["0", "1", "3", "5", "10", "15", "20", "30"], variable=self.newsfeed_minutes_var, command=lambda _: self.refresh_selected_account_plan())
         self.newsfeed_menu.pack(fill="x", padx=15, pady=(4, 10))
 
         ctk.CTkLabel(self.settings_box, text="Thời gian lướt Reels", anchor="w").pack(fill="x", padx=15)
         self.reels_minutes_var = ctk.StringVar(value="5")
-        self.reels_menu = ctk.CTkOptionMenu(self.settings_box, values=["0", "1", "3", "5", "10", "15", "20", "30"], variable=self.reels_minutes_var)
+        self.reels_menu = ctk.CTkOptionMenu(self.settings_box, values=["0", "1", "3", "5", "10", "15", "20", "30"], variable=self.reels_minutes_var, command=lambda _: self.refresh_selected_account_plan())
         self.reels_menu.pack(fill="x", padx=15, pady=(4, 10))
 
         ctk.CTkLabel(self.settings_box, text="Nghỉ giữa mỗi lần cuộn", anchor="w").pack(fill="x", padx=15)
         self.pause_seconds_var = ctk.StringVar(value="4-9")
-        self.pause_menu = ctk.CTkOptionMenu(self.settings_box, values=["2-5", "4-9", "6-12", "10-20"], variable=self.pause_seconds_var)
+        self.pause_menu = ctk.CTkOptionMenu(self.settings_box, values=["2-5", "4-9", "6-12", "10-20"], variable=self.pause_seconds_var, command=lambda _: self.refresh_selected_account_plan())
         self.pause_menu.pack(fill="x", padx=15, pady=(4, 15))
 
         self.auto_like_care_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(self.settings_box, text="Tự động Like (mỗi 10-20 bài/reels)", variable=self.auto_like_care_var).pack(fill="x", padx=15, pady=(0, 15))
+        ctk.CTkCheckBox(
+            self.settings_box,
+            text="Tự động Like (mỗi 10-20 bài/reels)",
+            variable=self.auto_like_care_var,
+            command=self.refresh_selected_account_plan,
+        ).pack(fill="x", padx=15, pady=(0, 8))
+
+        self.smart_care_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            self.settings_box,
+            text="Nuôi thông minh theo từng acc",
+            variable=self.smart_care_var,
+            command=self.refresh_selected_account_plan,
+        ).pack(fill="x", padx=15, pady=(0, 15))
+
+        self.care_plan_preview = ctk.CTkLabel(
+            self.settings_box,
+            text="Chọn tài khoản để xem gợi ý nuôi riêng.",
+            text_color="#a7f3d0",
+            wraplength=280,
+            justify="left",
+            anchor="w",
+        )
+        self.care_plan_preview.pack(fill="x", padx=15, pady=(0, 15))
 
         ctk.CTkButton(self.detail, text="▶ Bắt đầu nuôi acc đang xem", height=42, command=self.start_care_selected_account).pack(fill="x", padx=20, pady=(10, 8))
         care_control_row = ctk.CTkFrame(self.detail, fg_color="transparent")
@@ -970,9 +994,9 @@ class FacebookCareTool(ctk.CTk):
 
     # --- CÁC HÀM TIỆN ÍCH CHUNG ---
     def configure_table_columns(self, frame):
-        widths = [42, 180, 190, 120, 160, 220, 150]
+        widths = [42, 170, 170, 115, 145, 150, 200, 150]
         for col, width in enumerate(widths):
-            frame.grid_columnconfigure(col, minsize=width, weight=1 if col in (1, 2, 5) else 0)
+            frame.grid_columnconfigure(col, minsize=width, weight=1 if col in (1, 2, 6) else 0)
 
     def dashboard_card(self, parent, title, value, color, col):
         card = ctk.CTkFrame(parent, fg_color=color, corner_radius=14)
@@ -1089,12 +1113,14 @@ class FacebookCareTool(ctk.CTk):
             corner_radius=8, padx=10, pady=5
         ).grid(row=0, column=3, sticky="w", padx=8, pady=10)
 
+        ctk.CTkLabel(row_frame, text=profile_label(acc.get("care_profile")), text_color="#a7f3d0", anchor="w").grid(row=0, column=4, sticky="ew", padx=8, pady=10)
+
         last_touch = acc.get("last_care") or acc.get("last_open") or "Chưa tương tác"
-        ctk.CTkLabel(row_frame, text=last_touch, text_color="#9ca3af", anchor="w").grid(row=0, column=4, sticky="ew", padx=8, pady=10)
-        ctk.CTkLabel(row_frame, text=acc.get("note", ""), text_color="#cbd5e1", anchor="w").grid(row=0, column=5, sticky="ew", padx=8, pady=10)
+        ctk.CTkLabel(row_frame, text=last_touch, text_color="#9ca3af", anchor="w").grid(row=0, column=5, sticky="ew", padx=8, pady=10)
+        ctk.CTkLabel(row_frame, text=acc.get("note", ""), text_color="#cbd5e1", anchor="w").grid(row=0, column=6, sticky="ew", padx=8, pady=10)
 
         action_box = ctk.CTkFrame(row_frame, fg_color="transparent")
-        action_box.grid(row=0, column=6, sticky="e", padx=8, pady=8)
+        action_box.grid(row=0, column=7, sticky="e", padx=8, pady=8)
 
         ctk.CTkButton(action_box, text="Nuôi", width=58, height=30, command=lambda: self.select_and_care(index)).pack(side="left", padx=3)
         ctk.CTkButton(action_box, text="Chi tiết", width=70, height=30, fg_color="#374151", command=lambda: self.select_account(index)).pack(side="left", padx=3)
@@ -1119,14 +1145,46 @@ class FacebookCareTool(ctk.CTk):
         self.selected_accounts.clear()
         self.refresh_accounts()
 
+    def get_current_care_settings(self):
+        return {
+            "newsfeed_minutes": int(self.newsfeed_minutes_var.get()),
+            "reels_minutes": int(self.reels_minutes_var.get()),
+            "pause_range": self.pause_seconds_var.get(),
+            "auto_like": self.auto_like_care_var.get(),
+        }
+
+    def get_account_care_plan(self, account, use_smart=None):
+        settings = self.get_current_care_settings()
+        if use_smart is None:
+            use_smart = getattr(self, "smart_care_var", None) is None or self.smart_care_var.get()
+        if use_smart:
+            return build_care_plan(account, settings)
+        manual_account = dict(account)
+        manual_account["care_profile"] = "manual"
+        return build_care_plan(manual_account, settings)
+
+    def refresh_selected_account_plan(self):
+        if self.selected_index is None or self.selected_index >= len(self.accounts):
+            if hasattr(self, "care_plan_preview"):
+                self.care_plan_preview.configure(text="Chọn tài khoản để xem gợi ý nuôi riêng.")
+            return
+        acc = self.accounts[self.selected_index]
+        plan = self.get_account_care_plan(acc)
+        if hasattr(self, "care_plan_preview"):
+            self.care_plan_preview.configure(text=f"Gợi ý: {format_care_plan(plan)}\nLý do: {plan.get('reason', '')}")
+
     def select_account(self, index):
         self.selected_index = index
         acc = self.accounts[index]
+        plan = self.get_account_care_plan(acc)
 
         self.detail_name.configure(text=acc.get("name", "Không tên"))
 
         info = (
             f"Trạng thái: {self.status_text(acc.get('status', 'active'))}\n\n"
+            f"Kiểu nuôi riêng: {profile_label(acc.get('care_profile'))}\n"
+            f"Gợi ý hiện tại: {format_care_plan(plan)}\n"
+            f"Lý do: {plan.get('reason', '')}\n\n"
             f"Cookie: {os.path.basename(acc.get('cookie_file', ''))}\n\n"
             f"Proxy: {acc.get('proxy', 'Không dùng proxy') or 'Không dùng proxy'}\n\n"
             f"Ghi chú: {acc.get('note', '')}\n\n"
@@ -1135,12 +1193,13 @@ class FacebookCareTool(ctk.CTk):
             f"Lần nuôi cuối: {acc.get('last_care', 'Chưa nuôi')}"
         )
         self.detail_info.configure(text=info)
+        self.refresh_selected_account_plan()
 
     # ĐÃ CHỈNH SỬA: Cho phép nhập UID|Pass|2FA vào Tên tài khoản
     def add_account_popup(self, edit_index=None):
         popup = ctk.CTkToplevel(self)
         popup.title("Thêm tài khoản" if edit_index is None else "Sửa tài khoản")
-        popup.geometry("470x540")
+        popup.geometry("470x620")
         popup.grab_set()
 
         current = self.accounts[edit_index] if edit_index is not None else {}
@@ -1154,6 +1213,13 @@ class FacebookCareTool(ctk.CTk):
         status_var = ctk.StringVar(value=current.get("status", "active"))
         status_menu = ctk.CTkOptionMenu(popup, width=360, variable=status_var, values=["active", "checkpoint", "cookie_error"])
         status_menu.pack()
+
+        ctk.CTkLabel(popup, text="Kiểu nuôi riêng").pack(pady=(15, 5))
+        profile_values = [f"{key} - {label}" for key, label in CARE_PROFILE_LABELS.items()]
+        profile_lookup = {value: value.split(" - ", 1)[0] for value in profile_values}
+        current_profile = current.get("care_profile", "auto")
+        profile_var = ctk.StringVar(value=next((value for value in profile_values if value.startswith(f"{current_profile} - ")), profile_values[0]))
+        ctk.CTkOptionMenu(popup, width=360, variable=profile_var, values=profile_values).pack()
 
         ctk.CTkLabel(popup, text="Ghi chú").pack(pady=(15, 5))
         note_entry = ctk.CTkEntry(popup, width=360)
@@ -1207,7 +1273,9 @@ class FacebookCareTool(ctk.CTk):
                 "cookie_file": cookie_path,
                 "created_at": current.get("created_at", datetime.now().strftime("%d/%m/%Y %H:%M")),
                 "last_open": current.get("last_open", "Chưa mở"),
-                "last_care": current.get("last_care", "Chưa nuôi")
+                "last_care": current.get("last_care", "Chưa nuôi"),
+                "care_profile": profile_lookup.get(profile_var.get(), "auto"),
+                "care_plan_note": current.get("care_plan_note", "")
             }
 
             if edit_index is None: self.accounts.append(account)
@@ -1269,32 +1337,37 @@ class FacebookCareTool(ctk.CTk):
         self._trigger_care(list(self.selected_accounts))
 
     def _trigger_care(self, index_list):
-        newsfeed_minutes = int(self.newsfeed_minutes_var.get())
-        reels_minutes = int(self.reels_minutes_var.get())
-        pause_range = self.pause_seconds_var.get()
+        global_settings = self.get_current_care_settings()
 
-        if newsfeed_minutes <= 0 and reels_minutes <= 0:
+        if global_settings["newsfeed_minutes"] <= 0 and global_settings["reels_minutes"] <= 0:
             messagebox.showwarning("Thông báo", "Hãy chọn thời gian Newsfeed hoặc Reels lớn hơn 0.")
             return
 
         self.reset_task_state()
 
-        settings = {
-            "newsfeed_minutes": newsfeed_minutes,
-            "reels_minutes": reels_minutes,
-            "pause_range": pause_range,
-            "auto_like": self.auto_like_care_var.get()
-        }
         now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        queued_count = 0
+        skipped_count = 0
+        use_smart = self.smart_care_var.get()
 
         for index in index_list:
             if index < len(self.accounts):
-                self.accounts[index]["last_care"] = now
-                threading.Thread(target=self.care_account, args=(self.accounts[index], settings), daemon=True).start()
+                account = self.accounts[index]
+                plan = self.get_account_care_plan(account, use_smart=use_smart)
+                account["care_plan_note"] = format_care_plan(plan)
+                if plan["newsfeed_minutes"] <= 0 and plan["reels_minutes"] <= 0:
+                    skipped_count += 1
+                    self.append_live_log(f"Bỏ qua {account.get('name', 'Unknown')}: {plan.get('reason', '')}")
+                    continue
+                account["last_care"] = now
+                queued_count += 1
+                threading.Thread(target=self.care_account, args=(account, plan), daemon=True).start()
 
         self.save_accounts()
         self.refresh_accounts()
-        self.append_live_log(f"Đã đưa {len(index_list)} tài khoản vào hàng chờ nuôi.")
+        if self.selected_index is not None:
+            self.select_account(self.selected_index)
+        self.append_live_log(f"Đã đưa {queued_count} tài khoản vào hàng chờ nuôi thông minh. Bỏ qua {skipped_count} acc cần nghỉ/không chạy.")
 
     # --- BỘ LÕI BROWSER AUTOMATION (PLAYWRIGHT) ---
     def normalize_cookie(self, cookie):
@@ -1577,10 +1650,17 @@ class FacebookCareTool(ctk.CTk):
         try:
             cookies = self.load_cookies(account)
             start_time = datetime.now().strftime("%d/%m/%Y %H:%M")
-            log_item = {"account": account.get("name", ""), "action": "care_newsfeed_reels", "status": "running", "start_time": start_time}
+            log_item = {
+                "account": account.get("name", ""),
+                "action": "care_smart_profile",
+                "status": "running",
+                "start_time": start_time,
+                "profile": settings.get("profile_label", "Theo cấu hình"),
+                "plan": format_care_plan(settings),
+            }
             self.logs.append(log_item)
             self.save_logs()
-            self.after(0, lambda name=account.get("name", ""): self.append_live_log(f"Bắt đầu nuôi {name}."))
+            self.after(0, lambda name=account.get("name", ""), plan=format_care_plan(settings): self.append_live_log(f"Bắt đầu nuôi {name} theo kế hoạch: {plan}"))
 
             with sync_playwright() as p:
                 browser, context, page = self.create_browser_page(p, cookies, account)
@@ -1605,7 +1685,7 @@ class FacebookCareTool(ctk.CTk):
                 if self.is_task_stopped():
                     self.after(0, lambda name=account.get("name", ""): self.append_live_log(f"Đã dừng nuôi {name}."))
                 else:
-                    self.after(0, lambda name=account.get("name", ""): self.append_live_log(f"Hoàn tất nuôi {name}."))
+                    self.after(0, lambda name=account.get("name", ""), plan=format_care_plan(settings): self.append_live_log(f"Hoàn tất nuôi {name}. Kế hoạch đã chạy: {plan}"))
 
         except Exception as e:
             self.logs.append({"account": account.get("name", ""), "status": "error", "error": str(e), "time": datetime.now().strftime("%d/%m/%Y %H:%M")})

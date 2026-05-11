@@ -56,10 +56,19 @@ class SQLiteStorage:
                     cookie_file TEXT,
                     created_at TEXT,
                     last_open TEXT,
-                    last_care TEXT
+                    last_care TEXT,
+                    care_profile TEXT,
+                    care_plan_note TEXT
                 )
                 """
             )
+            existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
+            for column, definition in {
+                "care_profile": "TEXT",
+                "care_plan_note": "TEXT",
+            }.items():
+                if column not in existing_columns:
+                    conn.execute(f"ALTER TABLE accounts ADD COLUMN {column} {definition}")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS logs (
@@ -86,8 +95,8 @@ class SQLiteStorage:
             conn.execute("DELETE FROM accounts")
             conn.executemany(
                 """
-                INSERT INTO accounts (name, uid, password, two_fa, status, note, proxy, cookie_file, created_at, last_open, last_care)
-                VALUES (:name, :uid, :password, :two_fa, :status, :note, :proxy, :cookie_file, :created_at, :last_open, :last_care)
+                INSERT INTO accounts (name, uid, password, two_fa, status, note, proxy, cookie_file, created_at, last_open, last_care, care_profile, care_plan_note)
+                VALUES (:name, :uid, :password, :two_fa, :status, :note, :proxy, :cookie_file, :created_at, :last_open, :last_care, :care_profile, :care_plan_note)
                 """,
                 clean_accounts,
             )
