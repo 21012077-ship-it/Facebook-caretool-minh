@@ -1,8 +1,10 @@
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from facebook_caretool.account_io import build_export_payload, merge_accounts, parse_import_payload
+from facebook_caretool.care_planner import build_care_plan, format_care_plan, recommend_care_profile
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
 from facebook_caretool.utils import load_json, parse_delay, parse_proxy, save_json, spin_content
@@ -136,6 +138,40 @@ class AnalyticsTest(unittest.TestCase):
         self.assertEqual(log_summary["by_day"]["01/05/2026"], 2)
         self.assertEqual(log_summary["by_account"]["A"], 2)
         self.assertEqual(log_summary["by_status"]["done"], 2)
+
+
+class CarePlannerTest(unittest.TestCase):
+    def setUp(self):
+        self.settings = {
+            "newsfeed_minutes": 15,
+            "reels_minutes": 15,
+            "pause_range": "4-9",
+            "auto_like": True,
+        }
+        self.now = datetime(2026, 5, 11, 12, 0)
+
+    def test_recommend_warmup_for_never_cared_account(self):
+        account = {"status": "active", "last_care": "Chưa nuôi", "note": "acc mới"}
+        self.assertEqual(recommend_care_profile(account, now=self.now), "warmup")
+        plan = build_care_plan(account, self.settings, now=self.now)
+        self.assertEqual(plan["newsfeed_minutes"], 3)
+        self.assertEqual(plan["reels_minutes"], 2)
+        self.assertFalse(plan["auto_like"])
+
+    def test_recommend_rest_for_checkpoint_account(self):
+        account = {"status": "checkpoint", "last_care": "10/05/2026 10:00"}
+        plan = build_care_plan(account, self.settings, now=self.now)
+        self.assertEqual(plan["profile"], "rest")
+        self.assertEqual(plan["newsfeed_minutes"], 0)
+        self.assertEqual(plan["reels_minutes"], 0)
+
+    def test_manual_profile_keeps_global_settings(self):
+        account = {"status": "active", "care_profile": "manual", "last_care": "10/05/2026 10:00"}
+        plan = build_care_plan(account, self.settings, now=self.now)
+        self.assertEqual(plan["profile"], "manual")
+        self.assertEqual(plan["newsfeed_minutes"], 15)
+        self.assertEqual(plan["reels_minutes"], 15)
+        self.assertIn("Newsfeed 15p", format_care_plan(plan))
 
 
 if __name__ == "__main__":
