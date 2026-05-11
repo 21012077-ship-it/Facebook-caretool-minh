@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+from typing import Any, Dict, Iterable, List
+
+from .models import Account, LogEntry
+from .utils import load_json, save_json
+
+
+class JsonStorage:
+    """Lưu account/log bằng JSON file, giữ tương thích dữ liệu cũ."""
+
+    def __init__(self, accounts_path: str = "accounts.json", logs_path: str = "logs.json") -> None:
+        self.accounts_path = accounts_path
+        self.logs_path = logs_path
+
+    def load_accounts(self) -> List[Dict[str, Any]]:
+        return [Account.from_dict(item).to_dict() for item in load_json(self.accounts_path, []) if isinstance(item, dict)]
+
+    def save_accounts(self, accounts: Iterable[Dict[str, Any]]) -> None:
+        save_json(self.accounts_path, [Account.from_dict(item).to_dict() for item in accounts])
+
+    def load_logs(self) -> List[Dict[str, Any]]:
+        return [LogEntry.from_dict(item).to_dict() for item in load_json(self.logs_path, []) if isinstance(item, dict)]
+
+    def save_logs(self, logs: Iterable[Dict[str, Any]]) -> None:
+        save_json(self.logs_path, [LogEntry.from_dict(item).to_dict() for item in logs])
+
+
+class SQLiteStorage:
+    """Storage SQLite tùy chọn cho account/log khi dữ liệu lớn hơn JSON."""
+
+    def __init__(self, db_path: str = "caretool.db") -> None:
+        self.db_path = db_path
+        self.init_schema()
+
+    def connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def init_schema(self) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS accounts (
+                    name TEXT NOT NULL,
+                    uid TEXT,
+                    password TEXT,
+                    two_fa TEXT,
+                    status TEXT NOT NULL,
+                    note TEXT,
+                    proxy TEXT,
+                    cookie_file TEXT,
+                    created_at TEXT,
+                    last_open TEXT,
+                    last_care TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS logs (
+                    account TEXT,
+                    status TEXT,
+                    action TEXT,
+                    start_time TEXT,
+                    end_time TEXT,
+                    time TEXT,
+                    error TEXT,
+                    metadata TEXT
+                )
+                """
+            )
+
+    def load_accounts(self) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT * FROM accounts").fetchall()
+        return [Account.from_dict(dict(row)).to_dict() for row in rows]
+
+    def save_accounts(self, accounts: Iterable[Dict[str, Any]]) -> None:
+        clean_accounts = [Account.from_dict(item).to_dict() for item in accounts]
+        with self.connect() as conn:
+            conn.execute("DELETE FROM accounts")
+            conn.executemany(
+                """
+                INSERT INTO accounts (name, uid, password, two_fa, status, note, proxy, cookie_file, created_at, last_open, last_care)
+                VALUES (:name, :uid, :password, :two_fa, :status, :note, :proxy, :cookie_file, :created_at, :last_open, :last_care)
+                """,
+                clean_accounts,
+            )
+
+    def load_logs(self) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT * FROM logs").fetchall()
+        logs = []
+        for row in rows:
+            item = dict(row)
+            metadata = item.pop("metadata", "")
+            if metadata:
+                item.update(json.loads(metadata))
+            logs.append(LogEntry.from_dict(item).to_dict())
+        return logs
+
+    def save_logs(self, logs: Iterable[Dict[str, Any]]) -> None:
+        clean_logs = [LogEntry.from_dict(item).to_dict() for item in logs]
+        rows = []
+        for item in clean_logs:
+            known = {"account", "status", "action", "start_time", "end_time", "time", "error"}
+            row = {key: item.get(key, "") for key in known}
+            row["metadata"] = json.dumps({k: v for k, v in item.items() if k not in known}, ensure_ascii=False)
+            rows.append(row)
+        with self.connect() as conn:
+            conn.execute("DELETE FROM logs")
+            conn.executemany(
+                """
+                INSERT INTO logs (account, status, action, start_time, end_time, time, error, metadata)
+                VALUES (:account, :status, :action, :start_time, :end_time, :time, :error, :metadata)
+                """,
+                rows,
+            )
