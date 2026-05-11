@@ -316,6 +316,22 @@ class FacebookCareTool(ctk.CTk):
             text="Nuôi thông minh theo từng acc",
             variable=self.smart_care_var,
             command=self.refresh_selected_account_plan,
+        ).pack(fill="x", padx=15, pady=(0, 8))
+
+        self.read_notifications_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            self.settings_box,
+            text="Đọc thông báo trong lúc nuôi",
+            variable=self.read_notifications_var,
+            command=self.refresh_selected_account_plan,
+        ).pack(fill="x", padx=15, pady=(0, 8))
+
+        self.join_groups_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            self.settings_box,
+            text="Thi thoảng tham gia 1-2 group",
+            variable=self.join_groups_var,
+            command=self.refresh_selected_account_plan,
         ).pack(fill="x", padx=15, pady=(0, 15))
 
         self.care_plan_preview = ctk.CTkLabel(
@@ -1151,6 +1167,10 @@ class FacebookCareTool(ctk.CTk):
             "reels_minutes": int(self.reels_minutes_var.get()),
             "pause_range": self.pause_seconds_var.get(),
             "auto_like": self.auto_like_care_var.get(),
+            "read_notifications": self.read_notifications_var.get(),
+            "join_groups": self.join_groups_var.get(),
+            "join_group_chance": 0.35,
+            "max_join_groups": 2,
         }
 
     def get_account_care_plan(self, account, use_smart=None):
@@ -1339,8 +1359,9 @@ class FacebookCareTool(ctk.CTk):
     def _trigger_care(self, index_list):
         global_settings = self.get_current_care_settings()
 
-        if global_settings["newsfeed_minutes"] <= 0 and global_settings["reels_minutes"] <= 0:
-            messagebox.showwarning("Thông báo", "Hãy chọn thời gian Newsfeed hoặc Reels lớn hơn 0.")
+        has_extra_care = global_settings.get("read_notifications") or global_settings.get("join_groups")
+        if global_settings["newsfeed_minutes"] <= 0 and global_settings["reels_minutes"] <= 0 and not has_extra_care:
+            messagebox.showwarning("Thông báo", "Hãy chọn thời gian Newsfeed/Reels hoặc bật đọc thông báo/tham gia group.")
             return
 
         self.reset_task_state()
@@ -1355,7 +1376,13 @@ class FacebookCareTool(ctk.CTk):
                 account = self.accounts[index]
                 plan = self.get_account_care_plan(account, use_smart=use_smart)
                 account["care_plan_note"] = format_care_plan(plan)
-                if plan["newsfeed_minutes"] <= 0 and plan["reels_minutes"] <= 0:
+                has_plan_action = (
+                    plan["newsfeed_minutes"] > 0
+                    or plan["reels_minutes"] > 0
+                    or plan.get("read_notifications")
+                    or (plan.get("join_groups") and plan.get("max_join_groups", 0) > 0)
+                )
+                if not has_plan_action:
                     skipped_count += 1
                     self.append_live_log(f"Bỏ qua {account.get('name', 'Unknown')}: {plan.get('reason', '')}")
                     continue
@@ -1646,6 +1673,90 @@ class FacebookCareTool(ctk.CTk):
             if not self.interruptible_sleep(self.get_pause_seconds(pause_range)):
                 break
 
+    def read_notifications_for_account(self, page, account, pause_range):
+        account_name = account.get("name", "")
+        self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] 🔔 Đang mở thông báo để đọc tự nhiên..."))
+        self.safe_goto(
+            page,
+            "https://www.facebook.com/notifications",
+            account=account,
+            fallback_urls=["https://facebook.com/notifications", "https://m.facebook.com/notifications"],
+        )
+        if not self.interruptible_sleep(random.uniform(4, 7)):
+            return
+
+        read_rounds = random.randint(2, 4)
+        for _ in range(read_rounds):
+            if self.is_task_stopped() or not self.wait_if_paused():
+                break
+            page.mouse.wheel(0, random.randint(250, 650))
+            if not self.interruptible_sleep(self.get_pause_seconds(pause_range)):
+                break
+
+        if self.is_task_stopped():
+            return
+
+        try:
+            notification_items = page.locator(
+                "a[href*='notif'], a[href*='notifications'], div[role='article'] a"
+            ).locator("visible=true")
+            visible_count = min(notification_items.count(), 5)
+            if visible_count > 0 and random.random() < 0.45:
+                item_index = random.randint(0, visible_count - 1)
+                notification_items.nth(item_index).click(timeout=3000)
+                self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] 🔔 Đã mở thử một thông báo ngẫu nhiên."))
+                self.interruptible_sleep(random.uniform(5, 9))
+        except Exception as exc:
+            error_msg = str(exc).split("\n")[0]
+            self.after(0, lambda n=account_name, err=error_msg: self.append_live_log(f"[{n}] ⚠️ Không mở được thông báo cụ thể: {err[:60]}..."))
+
+    def maybe_join_groups_for_account(self, page, account, settings):
+        account_name = account.get("name", "")
+        if not settings.get("join_groups") or settings.get("max_join_groups", 0) <= 0:
+            return
+        if random.random() > settings.get("join_group_chance", 0.35):
+            self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Bỏ qua tham gia group ở lượt này để hành vi tự nhiên hơn."))
+            return
+
+        target_count = random.randint(1, int(settings.get("max_join_groups", 2)))
+        joined_count = 0
+        self.after(0, lambda n=account_name, c=target_count: self.append_live_log(f"[{n}] 👥 Tìm group gợi ý để tham gia tối đa {c} group..."))
+        self.safe_goto(
+            page,
+            "https://www.facebook.com/groups/discover/",
+            account=account,
+            fallback_urls=["https://facebook.com/groups/discover/", "https://m.facebook.com/groups/"],
+        )
+        if not self.interruptible_sleep(random.uniform(5, 8)):
+            return
+
+        for _ in range(8):
+            if joined_count >= target_count or self.is_task_stopped() or not self.wait_if_paused():
+                break
+            try:
+                join_button = page.locator(
+                    "div[aria-label='Tham gia nhóm'], div[aria-label='Join group'], "
+                    "span:has-text('Tham gia nhóm'), span:has-text('Join group'), "
+                    "div[role='button']:has-text('Tham gia nhóm'), div[role='button']:has-text('Join group')"
+                ).locator("visible=true").first
+
+                if join_button.is_visible(timeout=2500):
+                    join_button.click(timeout=4000, force=True)
+                    joined_count += 1
+                    self.after(0, lambda n=account_name, c=joined_count: self.append_live_log(f"[{n}] 👥 Đã gửi yêu cầu/tham gia group #{c}."))
+                    if not self.interruptible_sleep(random.uniform(6, 12)):
+                        break
+                    continue
+            except Exception:
+                pass
+
+            page.mouse.wheel(0, random.randint(500, 950))
+            if not self.interruptible_sleep(random.uniform(3, 6)):
+                break
+
+        if joined_count == 0:
+            self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Không tìm thấy nút tham gia group phù hợp trên màn hình."))
+
     def care_account(self, account, settings):
         try:
             cookies = self.load_cookies(account)
@@ -1668,6 +1779,9 @@ class FacebookCareTool(ctk.CTk):
                 # GỌI HÀM KIỂM TRA ĐĂNG NHẬP Ở ĐÂY
                 self.ensure_login(context, page, account)
 
+                if settings.get("read_notifications") and not self.is_task_stopped():
+                    self.read_notifications_for_account(page, account, settings["pause_range"])
+
                 if settings["newsfeed_minutes"] > 0 and not self.is_task_stopped():
                     self.goto_facebook_home(page, account=account)
                     if self.interruptible_sleep(random.uniform(5, 8)):
@@ -1677,6 +1791,9 @@ class FacebookCareTool(ctk.CTk):
                     self.safe_goto(page, "https://www.facebook.com/reel/", account=account, fallback_urls=["https://facebook.com/reel/", "https://m.facebook.com/reel/"])
                     if self.interruptible_sleep(random.uniform(5, 8)):
                         self.scroll_page_for_minutes(page, settings["reels_minutes"], settings["pause_range"], "reels", account.get("name", ""), settings["auto_like"])
+
+                if settings.get("join_groups") and not self.is_task_stopped():
+                    self.maybe_join_groups_for_account(page, account, settings)
 
                 log_item["status"] = "stopped" if self.is_task_stopped() else "done"
                 log_item["end_time"] = datetime.now().strftime("%d/%m/%Y %H:%M")

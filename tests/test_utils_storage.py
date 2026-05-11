@@ -173,6 +173,24 @@ class CarePlannerTest(unittest.TestCase):
         self.assertEqual(plan["reels_minutes"], 15)
         self.assertIn("Newsfeed 15p", format_care_plan(plan))
 
+    def test_plan_includes_notifications_and_occasional_group_joining(self):
+        settings = {
+            **self.settings,
+            "read_notifications": True,
+            "join_groups": True,
+            "join_group_chance": 0.5,
+            "max_join_groups": 2,
+        }
+        account = {"status": "active", "care_profile": "balanced", "last_care": "10/05/2026 10:00"}
+        plan = build_care_plan(account, settings, now=self.now)
+
+        self.assertTrue(plan["read_notifications"])
+        self.assertTrue(plan["join_groups"])
+        self.assertEqual(plan["max_join_groups"], 2)
+        self.assertEqual(plan["join_group_chance"], 0.5)
+        self.assertIn("đọc thông báo", format_care_plan(plan))
+        self.assertIn("tham gia 1-2 group", format_care_plan(plan))
+
 
 if __name__ == "__main__":
     unittest.main()
