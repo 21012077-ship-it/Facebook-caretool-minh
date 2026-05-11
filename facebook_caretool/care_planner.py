@@ -74,6 +74,18 @@ def build_care_plan(account: Dict[str, Any], global_settings: Dict[str, Any], no
     max_reels = clamp_minutes(global_settings.get("reels_minutes", 0))
     pause_range = global_settings.get("pause_range", "4-9")
     auto_like = bool(global_settings.get("auto_like", False))
+    read_notifications = bool(global_settings.get("read_notifications", False))
+    join_groups = bool(global_settings.get("join_groups", False))
+    try:
+        join_group_chance = float(global_settings.get("join_group_chance", 0.35))
+    except (TypeError, ValueError):
+        join_group_chance = 0.35
+    join_group_chance = max(0.0, min(1.0, join_group_chance))
+    try:
+        max_join_groups = int(global_settings.get("max_join_groups", 2))
+    except (TypeError, ValueError):
+        max_join_groups = 2
+    max_join_groups = max(0, min(2, max_join_groups))
 
     templates = {
         "warmup": {
@@ -81,34 +93,54 @@ def build_care_plan(account: Dict[str, Any], global_settings: Dict[str, Any], no
             "reels_minutes": min(max_reels, 2) if max_reels else 0,
             "pause_range": "10-20",
             "auto_like": False,
-            "reason": "Acc mới/lâu chưa nuôi nên chỉ lướt nhẹ, nghỉ dài và không tự like.",
+            "read_notifications": read_notifications,
+            "join_groups": False,
+            "join_group_chance": 0.0,
+            "max_join_groups": 0,
+            "reason": "Acc mới/lâu chưa nuôi nên chỉ lướt nhẹ, có thể đọc thông báo nhưng không tự like/tham gia nhóm.",
         },
         "balanced": {
             "newsfeed_minutes": min(max_newsfeed, 8) if max_newsfeed else 0,
             "reels_minutes": min(max_reels, 5) if max_reels else 0,
             "pause_range": pause_range,
             "auto_like": auto_like,
-            "reason": "Acc hoạt động bình thường nên chia đều Newsfeed và Reels.",
+            "read_notifications": read_notifications,
+            "join_groups": join_groups,
+            "join_group_chance": join_group_chance,
+            "max_join_groups": max_join_groups,
+            "reason": "Acc hoạt động bình thường nên chia đều Newsfeed/Reels, đọc thông báo và thỉnh thoảng tham gia nhóm nếu bật.",
         },
         "reels_focus": {
             "newsfeed_minutes": min(max_newsfeed, 3) if max_newsfeed else 0,
             "reels_minutes": min(max_reels, 10) if max_reels else 0,
             "pause_range": pause_range,
             "auto_like": auto_like,
-            "reason": "Ghi chú/nhu cầu ưu tiên video nên tăng thời lượng Reels.",
+            "read_notifications": read_notifications,
+            "join_groups": join_groups,
+            "join_group_chance": join_group_chance,
+            "max_join_groups": max_join_groups,
+            "reason": "Ghi chú/nhu cầu ưu tiên video nên tăng thời lượng Reels, vẫn có thể đọc thông báo/tham gia nhóm nhẹ.",
         },
         "newsfeed_focus": {
             "newsfeed_minutes": min(max_newsfeed, 10) if max_newsfeed else 0,
             "reels_minutes": min(max_reels, 2) if max_reels else 0,
             "pause_range": pause_range,
             "auto_like": auto_like,
-            "reason": "Ghi chú/nhu cầu ưu tiên bảng tin nên tăng thời lượng Newsfeed.",
+            "read_notifications": read_notifications,
+            "join_groups": join_groups,
+            "join_group_chance": join_group_chance,
+            "max_join_groups": max_join_groups,
+            "reason": "Ghi chú/nhu cầu ưu tiên bảng tin nên tăng thời lượng Newsfeed, vẫn có thể đọc thông báo/tham gia nhóm nhẹ.",
         },
         "rest": {
             "newsfeed_minutes": 0,
             "reels_minutes": 0,
             "pause_range": "10-20",
             "auto_like": False,
+            "read_notifications": False,
+            "join_groups": False,
+            "join_group_chance": 0.0,
+            "max_join_groups": 0,
             "reason": "Acc checkpoint/die hoặc được đánh dấu nghỉ nên không chạy nuôi tự động.",
         },
         "manual": {
@@ -116,6 +148,10 @@ def build_care_plan(account: Dict[str, Any], global_settings: Dict[str, Any], no
             "reels_minutes": max_reels,
             "pause_range": pause_range,
             "auto_like": auto_like,
+            "read_notifications": read_notifications,
+            "join_groups": join_groups,
+            "join_group_chance": join_group_chance,
+            "max_join_groups": max_join_groups,
             "reason": "Dùng đúng cấu hình chung bạn đang chọn.",
         },
     }
@@ -127,9 +163,15 @@ def build_care_plan(account: Dict[str, Any], global_settings: Dict[str, Any], no
 
 def format_care_plan(plan: Dict[str, Any]) -> str:
     like_text = "bật like" if plan.get("auto_like") else "không like"
+    notification_text = "đọc thông báo" if plan.get("read_notifications") else "không đọc thông báo"
+    if plan.get("join_groups") and plan.get("max_join_groups", 0) > 0:
+        group_text = f"thi thoảng tham gia 1-{plan.get('max_join_groups', 2)} group"
+    else:
+        group_text = "không tham gia group"
     return (
         f"{plan.get('profile_label', 'Không rõ')}: "
         f"Newsfeed {plan.get('newsfeed_minutes', 0)}p, "
         f"Reels {plan.get('reels_minutes', 0)}p, "
-        f"nghỉ {plan.get('pause_range', '4-9')}s, {like_text}."
+        f"nghỉ {plan.get('pause_range', '4-9')}s, {like_text}, "
+        f"{notification_text}, {group_text}."
     )
