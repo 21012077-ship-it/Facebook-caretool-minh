@@ -53,7 +53,7 @@ class FacebookCareTool(ctk.CTk):
 
         self.selected_index = None
         self.comment_selected_accounts = set()
-        self.comment_image_path = "" # Lưu đường dẫn ảnh/video muốn comment
+        self.comment_image_paths = [] # Lưu danh sách đường dẫn ảnh/video muốn comment ngẫu nhiên
         self.task_pause_event = threading.Event()
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
@@ -659,16 +659,20 @@ class FacebookCareTool(ctk.CTk):
             self.spin_preview_label.configure(text=f"Lỗi cú pháp Spin!", text_color="#ef4444")
 
     def choose_comment_image(self):
-        path = filedialog.askopenfilename(
+        paths = filedialog.askopenfilenames(
             title="Chọn Ảnh/Video để Comment",
             filetypes=[("Image/Video Files", "*.png *.jpg *.jpeg *.mp4 *.avi *.gif"), ("All Files", "*.*")]
         )
-        if path:
-            self.comment_image_path = path
-            self.btn_add_image.configure(text="✅ Đã có Ảnh", fg_color="#059669")
-            self.append_live_log(f"Đã chọn file ảnh/video: {os.path.basename(path)}")
+        if paths:
+            self.comment_image_paths = list(paths)
+            file_count = len(self.comment_image_paths)
+            self.btn_add_image.configure(text=f"✅ Đã có {file_count} file", fg_color="#059669")
+            preview_names = ", ".join(os.path.basename(path) for path in self.comment_image_paths[:3])
+            if file_count > 3:
+                preview_names += f", ... (+{file_count - 3})"
+            self.append_live_log(f"Đã chọn {file_count} file ảnh/video để random: {preview_names}")
         else:
-            self.comment_image_path = ""
+            self.comment_image_paths = []
             self.btn_add_image.configure(text="📷 Thêm Ảnh/Video", fg_color="#475569")
 
     # --- LOGIC CHẠY CHIẾN DỊCH COMMENT ---
@@ -699,9 +703,14 @@ class FacebookCareTool(ctk.CTk):
             return
 
         self.reset_task_state()
+        comment_image_paths = [
+            path for path in getattr(self, "comment_image_paths", [])
+            if path and os.path.exists(path)
+        ]
+
         threading.Thread(
             target=self.run_comment_task,
-            args=(list(self.comment_selected_accounts), urls, raw_content, comment_limit),
+            args=(list(self.comment_selected_accounts), urls, raw_content, comment_limit, comment_image_paths),
             daemon=True
         ).start()
 
@@ -740,7 +749,7 @@ class FacebookCareTool(ctk.CTk):
 
         return not self.is_task_stopped()
 
-    def run_comment_task(self, account_indexes, urls, raw_content, comment_limit):
+    def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None):
         comment_pool = [line.strip() for line in raw_content.split('\n') if line.strip()]
 
         if not comment_pool:
@@ -748,6 +757,9 @@ class FacebookCareTool(ctk.CTk):
             return
 
         delay_range = self.delay_cmt_input.get()
+        comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
+        if comment_image_paths:
+            self.after(0, lambda count=len(comment_image_paths): self.append_live_log(f"📷 Sẽ random 1 trong {count} ảnh/video cho mỗi comment."))
 
         acc_tasks = {acc_idx: [] for acc_idx in account_indexes}
         skipped_urls = 0
@@ -826,15 +838,17 @@ class FacebookCareTool(ctk.CTk):
                             if not self.interruptible_sleep(random.uniform(1.5, 2.5)):
                                 break
 
-                            if hasattr(self, 'comment_image_path') and self.comment_image_path and os.path.exists(self.comment_image_path):
-                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang tải ảnh/video đính kèm..."))
+                            selected_image_path = random.choice(comment_image_paths) if comment_image_paths else None
+                            if selected_image_path:
+                                image_name = os.path.basename(selected_image_path)
+                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang tải ảnh/video random: {img}"))
                                 try:
                                     with page.expect_file_chooser(timeout=8000) as fc_info:
                                         attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
                                         attach_btn.click()
 
                                     file_chooser = fc_info.value
-                                    file_chooser.set_files(self.comment_image_path)
+                                    file_chooser.set_files(selected_image_path)
                                     if not self.interruptible_sleep(random.uniform(4, 7)):
                                         break
 
