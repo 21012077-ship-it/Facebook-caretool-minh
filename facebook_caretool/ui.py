@@ -18,6 +18,7 @@ import pyotp  # Thư viện mới thêm để lấy mã 2FA
 
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
+DEFAULT_COMMENT_CONTENT = "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content."
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -62,7 +63,10 @@ class FacebookCareTool(ctk.CTk):
             "default_home_url": "https://www.facebook.com/",
             "export_sensitive_default": False,
             "import_overwrite_default": False,
+            "comment_content": DEFAULT_COMMENT_CONTENT,
         })
+        self.comment_content_save_job = None
+        self.protocol("WM_DELETE_WINDOW", self.on_app_close)
 
         self.build_ui()
         self.refresh_accounts()
@@ -72,6 +76,24 @@ class FacebookCareTool(ctk.CTk):
 
     def save_json(self, path, data):
         save_json(path, data)
+
+    def schedule_comment_content_save(self, event=None):
+        if self.comment_content_save_job:
+            self.after_cancel(self.comment_content_save_job)
+        self.comment_content_save_job = self.after(500, self.save_comment_content)
+
+    def save_comment_content(self, event=None, show_message=False):
+        if not hasattr(self, "comment_content"):
+            return
+        self.comment_content_save_job = None
+        self.app_settings["comment_content"] = self.comment_content.get("1.0", "end-1c")
+        self.save_json("settings.json", self.app_settings)
+        if show_message:
+            messagebox.showinfo("Đã lưu", "Đã lưu nội dung comment.")
+
+    def on_app_close(self):
+        self.save_comment_content()
+        self.destroy()
 
     def save_accounts(self):
         self.storage.save_accounts(self.accounts)
@@ -413,7 +435,10 @@ class FacebookCareTool(ctk.CTk):
 
         self.comment_content = ctk.CTkTextbox(content_frame, wrap="word")
         self.comment_content.grid(row=1, column=0, sticky="nsew", padx=15, pady=5)
-        self.comment_content.insert("1.0", "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content.")
+        self.comment_content.insert("1.0", self.app_settings.get("comment_content", DEFAULT_COMMENT_CONTENT))
+        self.comment_content.bind("<KeyRelease>", self.schedule_comment_content_save)
+        self.comment_content.bind("<FocusOut>", self.save_comment_content)
+        self.comment_content.bind("<<Paste>>", lambda event: self.after(50, self.save_comment_content))
 
         tool_cmt = ctk.CTkFrame(content_frame, fg_color="transparent")
         tool_cmt.grid(row=2, column=0, sticky="ew", padx=15, pady=5)
@@ -660,6 +685,7 @@ class FacebookCareTool(ctk.CTk):
             return
 
         raw_content = self.comment_content.get("1.0", "end-1c").strip()
+        self.save_comment_content()
         if not raw_content:
             messagebox.showwarning("Thông báo", "Vui lòng nhập nội dung comment!")
             return
@@ -678,6 +704,41 @@ class FacebookCareTool(ctk.CTk):
             args=(list(self.comment_selected_accounts), urls, raw_content, comment_limit),
             daemon=True
         ).start()
+
+    def browse_during_comment_pause(self, page, account, seconds):
+        account_name = account.get("name", "")
+        end_time = time.time() + seconds
+        mode = random.choice(["reels", "newsfeed"])
+        mode_text = "Reels" if mode == "reels" else "Newsfeed"
+        start_url = "https://www.facebook.com/reel/" if mode == "reels" else "https://www.facebook.com/"
+        fallback_urls = ["https://facebook.com/reel/", "https://m.facebook.com/reel/"] if mode == "reels" else ["https://facebook.com/", "https://m.facebook.com/"]
+
+        self.after(0, lambda n=account_name, m=mode_text, d=int(seconds): self.append_live_log(f"[{n}] 🧭 Đang lướt {m} trong thời gian nghỉ {d} giây..."))
+        try:
+            self.safe_goto(page, start_url, account=account, fallback_urls=fallback_urls)
+            if not self.interruptible_sleep(random.uniform(3, 5)):
+                return False
+        except Exception as exc:
+            self.after(0, lambda n=account_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không mở được {mode_text}, chuyển sang nghỉ thường: {err[:60]}..."))
+            return self.interruptible_sleep(max(0, end_time - time.time()))
+
+        while time.time() < end_time and not self.is_task_stopped():
+            if not self.wait_if_paused():
+                return False
+            try:
+                if mode == "reels":
+                    page.keyboard.press("ArrowDown")
+                else:
+                    page.mouse.wheel(0, random.randint(350, 900))
+            except Exception as exc:
+                self.after(0, lambda n=account_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Lướt trong lúc nghỉ bị lỗi: {err[:60]}..."))
+                return self.interruptible_sleep(max(0, end_time - time.time()))
+
+            remaining = max(0, end_time - time.time())
+            if not self.interruptible_sleep(min(self.get_pause_seconds("3-7"), remaining)):
+                return False
+
+        return not self.is_task_stopped()
 
     def run_comment_task(self, account_indexes, urls, raw_content, comment_limit):
         comment_pool = [line.strip() for line in raw_content.split('\n') if line.strip()]
@@ -744,6 +805,7 @@ class FacebookCareTool(ctk.CTk):
                                         break
                             except: pass
 
+                        comment_success = False
                         try:
                             comment_box = page.locator('div[role="textbox"][contenteditable="true"][aria-label="Viết bình luận..."], div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]').last
                             comment_box.scroll_into_view_if_needed()
@@ -784,6 +846,7 @@ class FacebookCareTool(ctk.CTk):
                                     self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Bỏ qua up ảnh (Không tìm thấy nút đính kèm)."))
 
                             page.keyboard.press("Enter")
+                            comment_success = True
 
                             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Comment thành công!"))
 
@@ -791,9 +854,13 @@ class FacebookCareTool(ctk.CTk):
                             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Lỗi: Không thể tương tác với ô comment."))
 
                         delay_sec = self.get_pause_seconds(delay_range)
-                        self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Đang nghỉ {int(d)} giây..."))
-                        if not self.interruptible_sleep(delay_sec):
-                            break
+                        if comment_success:
+                            if not self.browse_during_comment_pause(page, account, delay_sec):
+                                break
+                        else:
+                            self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Đang nghỉ {int(d)} giây trước link tiếp theo..."))
+                            if not self.interruptible_sleep(delay_sec):
+                                break
 
                     browser.close()
             except Exception as e:
@@ -922,6 +989,7 @@ class FacebookCareTool(ctk.CTk):
             self.settings_data_label.configure(text=f"Accounts file: {ACCOUNTS_FILE}\nLogs file: {LOGS_FILE}\nTổng account: {len(self.accounts)}\nTổng log: {len(self.logs)}")
 
     def save_app_settings(self):
+        self.save_comment_content(show_message=False)
         self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
         self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
         self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
