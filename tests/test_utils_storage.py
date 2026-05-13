@@ -27,6 +27,28 @@ class UtilsTest(unittest.TestCase):
     def test_parse_proxy_with_scheme(self):
         self.assertEqual(parse_proxy("socks5://proxy.local:1080"), {"server": "socks5://proxy.local:1080"})
 
+    def test_parse_proxy_socks5_with_auth_in_url(self):
+        self.assertEqual(
+            parse_proxy("socks5://user:secret@proxy.local:1080"),
+            {"server": "socks5://proxy.local:1080", "username": "user", "password": "secret"},
+        )
+
+    def test_parse_proxy_socks5_prefix_with_auth(self):
+        self.assertEqual(
+            parse_proxy("socks5:proxy.local:1080:user:p:a:s:s"),
+            {"server": "socks5://proxy.local:1080", "username": "user", "password": "p:a:s:s"},
+        )
+
+    def test_parse_proxy_socks5_suffix_with_auth(self):
+        self.assertEqual(
+            parse_proxy("proxy.local:1080:user:p:a:s:s:socks5"),
+            {"server": "socks5://proxy.local:1080", "username": "user", "password": "p:a:s:s"},
+        )
+
+    def test_parse_proxy_invalid_scheme(self):
+        with self.assertRaises(ValueError):
+            parse_proxy("ftp://proxy.local:21")
+
     def test_parse_proxy_invalid(self):
         with self.assertRaises(ValueError):
             parse_proxy("proxy.local")
