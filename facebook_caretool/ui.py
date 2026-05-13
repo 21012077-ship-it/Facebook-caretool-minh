@@ -1382,7 +1382,7 @@ class FacebookCareTool(ctk.CTk):
         note_entry.insert(0, current.get("note", ""))
 
         ctk.CTkLabel(popup, text="Proxy (bỏ trống nếu không dùng)").pack(pady=(15, 5))
-        proxy_entry = ctk.CTkEntry(popup, width=360, placeholder_text="host:port hoặc host:port:user:pass")
+        proxy_entry = ctk.CTkEntry(popup, width=360, placeholder_text="host:port, host:port:user:pass hoặc socks5://host:port")
         proxy_entry.pack()
         proxy_entry.insert(0, current.get("proxy", ""))
 

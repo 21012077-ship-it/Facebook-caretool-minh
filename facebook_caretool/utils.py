@@ -5,6 +5,7 @@ import os
 import random
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -27,23 +28,52 @@ def save_json(path: str | os.PathLike[str], data: Any) -> None:
         json.dump(data, file, indent=4, ensure_ascii=False)
 
 
+SUPPORTED_PROXY_SCHEMES = {"http", "https", "socks4", "socks5"}
+
+
+def _build_proxy_config(scheme: str, host: str, port: str, username: str = "", password: str = "") -> Dict[str, str]:
+    if scheme not in SUPPORTED_PROXY_SCHEMES or not host or not port:
+        raise ValueError(
+            "Proxy không đúng định dạng. Dùng host:port, host:port:user:pass "
+            "hoặc socks5://host:port."
+        )
+
+    config = {"server": f"{scheme}://{host}:{port}"}
+    if username or password:
+        if not username or not password:
+            raise ValueError("Proxy có user/pass phải nhập đủ username và password.")
+        config["username"] = username
+        config["password"] = password
+    return config
+
+
 def parse_proxy(proxy_text: str | None) -> Optional[Dict[str, str]]:
     proxy_text = (proxy_text or "").strip()
     if not proxy_text:
         return None
+
     if "://" in proxy_text:
-        return {"server": proxy_text}
+        parsed = urlsplit(proxy_text)
+        scheme = parsed.scheme.lower()
+        username = parsed.username or ""
+        password = parsed.password or ""
+        return _build_proxy_config(scheme, parsed.hostname or "", str(parsed.port or ""), username, password)
 
     parts = proxy_text.split(":")
+    scheme = "http"
+    if parts and parts[0].lower() in SUPPORTED_PROXY_SCHEMES:
+        scheme = parts.pop(0).lower()
+    elif parts and parts[-1].lower() in SUPPORTED_PROXY_SCHEMES:
+        scheme = parts.pop(-1).lower()
+
     if len(parts) == 2 and all(parts):
-        return {"server": f"http://{parts[0]}:{parts[1]}"}
+        return _build_proxy_config(scheme, parts[0], parts[1])
     if len(parts) >= 4 and all(parts[:3]) and parts[3]:
-        return {
-            "server": f"http://{parts[0]}:{parts[1]}",
-            "username": parts[2],
-            "password": ":".join(parts[3:]),
-        }
-    raise ValueError("Proxy không đúng định dạng. Dùng host:port hoặc host:port:user:pass.")
+        return _build_proxy_config(scheme, parts[0], parts[1], parts[2], ":".join(parts[3:]))
+    raise ValueError(
+        "Proxy không đúng định dạng. Dùng host:port, host:port:user:pass "
+        "hoặc socks5://host:port."
+    )
 
 
 def parse_delay(delay_text: str | None, default: Tuple[float, float] = (4.0, 9.0)) -> Tuple[float, float]:

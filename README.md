@@ -7,7 +7,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 ## Tính năng hiện có
 
 - Quản lý danh sách account với trạng thái live/checkpoint/die, proxy, ghi chú và thời điểm tương tác.
-- Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng.
+- Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng, hỗ trợ HTTP/HTTPS/SOCKS4/SOCKS5.
 - Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
 - Campaign comment theo danh sách URL, nội dung spin và giới hạn comment theo account.
 - Mở browser thủ công cho từng account.
@@ -41,6 +41,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
+
+
+## Định dạng proxy
+
+Ô proxy hỗ trợ các định dạng sau:
+
+- `host:port` (mặc định dùng HTTP)
+- `host:port:user:pass` (mặc định dùng HTTP, password có thể chứa dấu `:`)
+- `socks5://host:port` hoặc `socks5://user:pass@host:port`
+- `socks4://host:port`, `http://host:port`, `https://host:port`
+- `socks5:host:port:user:pass` hoặc `host:port:user:pass:socks5`
 
 ## Chạy ứng dụng
 
