@@ -7,7 +7,7 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import load_json, random_delay, save_json, spin_content
+from .utils import build_comment_payloads, load_json, random_delay, save_json, spin_content
 import json
 import os
 import threading
@@ -53,7 +53,7 @@ class FacebookCareTool(ctk.CTk):
 
         self.selected_index = None
         self.comment_selected_accounts = set()
-        self.comment_image_paths = [] # Lưu danh sách đường dẫn ảnh/video muốn comment ngẫu nhiên
+        self.comment_image_paths = [] # Lưu danh sách đường dẫn ảnh/video ghép đi kèm từng comment
         self.task_pause_event = threading.Event()
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
@@ -670,7 +670,7 @@ class FacebookCareTool(ctk.CTk):
             preview_names = ", ".join(os.path.basename(path) for path in self.comment_image_paths[:3])
             if file_count > 3:
                 preview_names += f", ... (+{file_count - 3})"
-            self.append_live_log(f"Đã chọn {file_count} file ảnh/video để random: {preview_names}")
+            self.append_live_log(f"Đã chọn {file_count} file ảnh/video để ghép kèm comment: {preview_names}")
         else:
             self.comment_image_paths = []
             self.btn_add_image.configure(text="📷 Thêm Ảnh/Video", fg_color="#475569")
@@ -750,16 +750,21 @@ class FacebookCareTool(ctk.CTk):
         return not self.is_task_stopped()
 
     def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None):
-        comment_pool = [line.strip() for line in raw_content.split('\n') if line.strip()]
+        delay_range = self.delay_cmt_input.get()
+        comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
+        comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
 
-        if not comment_pool:
+        if not comment_payloads:
             self.after(0, lambda: messagebox.showwarning("Lỗi", "Không tìm thấy nội dung comment hợp lệ!"))
             return
 
-        delay_range = self.delay_cmt_input.get()
-        comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
         if comment_image_paths:
-            self.after(0, lambda count=len(comment_image_paths): self.append_live_log(f"📷 Sẽ random 1 trong {count} ảnh/video cho mỗi comment."))
+            self.after(
+                0,
+                lambda count=len(comment_image_paths): self.append_live_log(
+                    f"📷 Ảnh/video sẽ đi kèm từng comment (không gửi tách riêng). Đang dùng {count} file."
+                ),
+            )
 
         acc_tasks = {acc_idx: [] for acc_idx in account_indexes}
         skipped_urls = 0
@@ -796,8 +801,9 @@ class FacebookCareTool(ctk.CTk):
                     for url in acc_urls:
                         if not self.wait_if_paused():
                             break
-                        random_line = random.choice(comment_pool)
-                        final_content = spin_content(random_line)
+                        comment_payload = random.choice(comment_payloads)
+                        final_content = spin_content(comment_payload["text"])
+                        selected_image_path = comment_payload.get("media_path") or None
 
                         self.after(0, lambda n=acc_name, u=url: self.append_live_log(f"[{n}] Đang vào bài: {u[:40]}..."))
                         self.safe_goto(page, url, account=account)
@@ -838,10 +844,9 @@ class FacebookCareTool(ctk.CTk):
                             if not self.interruptible_sleep(random.uniform(1.5, 2.5)):
                                 break
 
-                            selected_image_path = random.choice(comment_image_paths) if comment_image_paths else None
                             if selected_image_path:
                                 image_name = os.path.basename(selected_image_path)
-                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang tải ảnh/video random: {img}"))
+                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng comment: {img}"))
                                 try:
                                     with page.expect_file_chooser(timeout=8000) as fc_info:
                                         attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
@@ -852,12 +857,13 @@ class FacebookCareTool(ctk.CTk):
                                     if not self.interruptible_sleep(random.uniform(4, 7)):
                                         break
 
-                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang lấy lại focus..."))
+                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã đính kèm, chuẩn bị gửi chung text + ảnh/video..."))
                                     comment_box.click()
                                     if not self.interruptible_sleep(1.5):
                                         break
                                 except Exception as e:
-                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Bỏ qua up ảnh (Không tìm thấy nút đính kèm)."))
+                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Không gửi comment vì ảnh/video đi kèm chưa đính kèm được."))
+                                    raise
 
                             page.keyboard.press("Enter")
                             comment_success = True
