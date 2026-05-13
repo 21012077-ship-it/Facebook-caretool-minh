@@ -533,7 +533,13 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkButton(right, text="🏠 Facebook Home", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/")).pack(fill="x", padx=20, pady=6)
         ctk.CTkButton(right, text="🎬 Reels", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/reel/")).pack(fill="x", padx=20, pady=6)
         ctk.CTkButton(right, text="💬 Messenger", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/messages/")).pack(fill="x", padx=20, pady=6)
-        ctk.CTkLabel(right, text="Cookie sống sẽ được kiểm tra qua ensure_login; nếu cookie die và có UID/Pass/2FA, tool sẽ tự đăng nhập và lưu lại cookie mới.", text_color="#9ca3af", wraplength=300, justify="left").pack(fill="x", padx=20, pady=(18, 0))
+        ctk.CTkLabel(
+            right,
+            text="Nút mở chỉ mở trình duyệt để bạn thao tác thủ công; tool không tự đăng nhập, không tự chạy nuôi và không tự tắt cửa sổ.",
+            text_color="#9ca3af",
+            wraplength=300,
+            justify="left",
+        ).pack(fill="x", padx=20, pady=(18, 0))
 
     # --- MÀN HÌNH 4: LỊCH SỬ NUÔI + DASHBOARD ---
     def build_view_history(self):
@@ -1728,20 +1734,32 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, self.refresh_accounts)
         return True
 
+    def wait_for_manual_browser_close(self, browser, context, page, account):
+        account_name = account.get("name") or account.get("uid") or "Unknown"
+        self.after(0, lambda n=account_name: self.append_live_log(
+            f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ giữ cửa sổ mở để bạn thao tác; hãy tự đóng Chrome khi xong."
+        ))
+
+        while browser.is_connected():
+            open_pages = [ctx_page for ctx_page in context.pages if not ctx_page.is_closed()]
+            if not open_pages:
+                break
+            time.sleep(1)
+
+        self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Đã đóng phiên trình duyệt thủ công."))
+
     def open_browser(self, account, start_url=None):
         try:
             cookies = self.load_cookies(account)
             with sync_playwright() as p:
                 browser, context, page = self.create_browser_page(p, cookies, account)
 
-                # GỌI HÀM KIỂM TRA ĐĂNG NHẬP Ở ĐÂY
-                self.ensure_login(context, page, account)
-
                 if start_url:
                     self.safe_goto(page, start_url, account=account)
                 else:
                     self.goto_facebook_home(page, account=account)
-                while True: time.sleep(1)
+
+                self.wait_for_manual_browser_close(browser, context, page, account)
         except Exception as e:
             self.after(0, lambda err=e: messagebox.showerror("Lỗi mở Facebook", str(err)))
 
