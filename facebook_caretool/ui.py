@@ -1749,18 +1749,31 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Đã đóng phiên trình duyệt thủ công."))
 
     def open_browser(self, account, start_url=None):
+        """Mở browser thủ công, không kiểm tra cookie/UID/pass hay ép auto-login."""
+        browser = None
+        context = None
+        page = None
+
         try:
             cookies = self.load_cookies(account)
             with sync_playwright() as p:
                 browser, context, page = self.create_browser_page(p, cookies, account)
+                target_url = start_url or self.app_settings.get("default_home_url", "https://www.facebook.com/")
 
-                if start_url:
-                    self.safe_goto(page, start_url, account=account)
-                else:
-                    self.goto_facebook_home(page, account=account)
+                try:
+                    self.safe_goto(page, target_url, account=account)
+                except Exception as navigation_error:
+                    account_name = account.get("name") or account.get("uid") or "Unknown"
+                    self.after(0, lambda n=account_name, err=navigation_error: self.append_live_log(
+                        f"[{n}] ⚠️ Không mở được URL ban đầu nhưng vẫn giữ Chrome để thao tác thủ công: {err}"
+                    ))
 
                 self.wait_for_manual_browser_close(browser, context, page, account)
         except Exception as e:
+            missing_login_error = "Không có Cookie và không có UID/Pass"
+            if missing_login_error in str(e) and browser and context and page:
+                self.wait_for_manual_browser_close(browser, context, page, account)
+                return
             self.after(0, lambda err=e: messagebox.showerror("Lỗi mở Facebook", str(err)))
 
     def get_pause_seconds(self, pause_range):
