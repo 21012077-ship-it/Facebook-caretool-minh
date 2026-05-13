@@ -7,7 +7,7 @@ from facebook_caretool.account_io import build_export_payload, merge_accounts, p
 from facebook_caretool.care_planner import build_care_plan, format_care_plan, recommend_care_profile
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
-from facebook_caretool.utils import load_json, parse_delay, parse_proxy, save_json, spin_content
+from facebook_caretool.utils import build_comment_payloads, load_json, parse_delay, parse_proxy, save_json, spin_content
 
 
 class UtilsTest(unittest.TestCase):
@@ -51,6 +51,24 @@ class UtilsTest(unittest.TestCase):
             return options[-1]
 
         self.assertEqual(spin_content("Xin {chào|{hi|hello}}", chooser=last), "Xin hello")
+
+    def test_build_comment_payloads_keeps_media_with_comment(self):
+        payloads = build_comment_payloads("cmt 1\ncmt 2\ncmt 3", ["a.jpg", "b.jpg"])
+
+        self.assertEqual(
+            payloads,
+            [
+                {"text": "cmt 1", "media_path": "a.jpg"},
+                {"text": "cmt 2", "media_path": "b.jpg"},
+                {"text": "cmt 3", "media_path": "a.jpg"},
+            ],
+        )
+
+    def test_build_comment_payloads_allows_text_only_comments(self):
+        self.assertEqual(
+            build_comment_payloads("cmt 1\n\ncmt 2"),
+            [{"text": "cmt 1", "media_path": ""}, {"text": "cmt 2", "media_path": ""}],
+        )
 
 
 class JsonStorageTest(unittest.TestCase):

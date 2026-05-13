@@ -66,6 +66,24 @@ def random_delay(delay_text: str | None, default: Tuple[float, float] = (4.0, 9.
     return random.uniform(minimum, maximum)
 
 
+def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
+    """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.
+
+    Khi có nhiều ảnh/video, mỗi dòng comment nhận một file theo thứ tự/cycle.
+    Nhờ vậy lúc random chỉ random cả gói text + media thay vì random riêng
+    comment và ảnh, tránh gửi nhầm ảnh không đi cùng nội dung đã chuẩn bị.
+    """
+    comments = [line.strip() for line in raw_content.split("\n") if line.strip()]
+    media = [path for path in (media_paths or []) if path]
+    payloads: List[Dict[str, str]] = []
+    for index, comment in enumerate(comments):
+        payload = {"text": comment, "media_path": ""}
+        if media:
+            payload["media_path"] = media[index % len(media)]
+        payloads.append(payload)
+    return payloads
+
+
 def spin_content(text: str, chooser=random.choice) -> str:
     def spin(match: re.Match[str]) -> str:
         options = [option.strip() for option in match.group(1).split("|")]
