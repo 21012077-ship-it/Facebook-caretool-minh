@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from .models import Account, LogEntry
-from .utils import load_json, save_json
+from .utils import dumps_json, load_json, save_json
 
 
 class JsonStorage:
@@ -15,18 +15,34 @@ class JsonStorage:
     def __init__(self, accounts_path: str = "accounts.json", logs_path: str = "logs.json") -> None:
         self.accounts_path = accounts_path
         self.logs_path = logs_path
+        self._last_accounts_payload: str | None = None
+        self._last_logs_payload: str | None = None
 
     def load_accounts(self) -> List[Dict[str, Any]]:
-        return [Account.from_dict(item).to_dict() for item in load_json(self.accounts_path, []) if isinstance(item, dict)]
+        accounts = [Account.from_dict(item).to_dict() for item in load_json(self.accounts_path, []) if isinstance(item, dict)]
+        self._last_accounts_payload = dumps_json(accounts)
+        return accounts
 
     def save_accounts(self, accounts: Iterable[Dict[str, Any]]) -> None:
-        save_json(self.accounts_path, [Account.from_dict(item).to_dict() for item in accounts])
+        clean_accounts = [Account.from_dict(item).to_dict() for item in accounts]
+        payload = dumps_json(clean_accounts)
+        if payload == self._last_accounts_payload:
+            return
+        save_json(self.accounts_path, clean_accounts)
+        self._last_accounts_payload = payload
 
     def load_logs(self) -> List[Dict[str, Any]]:
-        return [LogEntry.from_dict(item).to_dict() for item in load_json(self.logs_path, []) if isinstance(item, dict)]
+        logs = [LogEntry.from_dict(item).to_dict() for item in load_json(self.logs_path, []) if isinstance(item, dict)]
+        self._last_logs_payload = dumps_json(logs)
+        return logs
 
     def save_logs(self, logs: Iterable[Dict[str, Any]]) -> None:
-        save_json(self.logs_path, [LogEntry.from_dict(item).to_dict() for item in logs])
+        clean_logs = [LogEntry.from_dict(item).to_dict() for item in logs]
+        payload = dumps_json(clean_logs)
+        if payload == self._last_logs_payload:
+            return
+        save_json(self.logs_path, clean_logs)
+        self._last_logs_payload = payload
 
 
 class SQLiteStorage:

@@ -19,6 +19,10 @@ import pyotp  # Thư viện mới thêm để lấy mã 2FA
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content."
+ACCOUNT_RENDER_BATCH_SIZE = 60
+BROWSER_RENDER_BATCH_SIZE = 80
+HISTORY_RENDER_BATCH_SIZE = 60
+
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -66,6 +70,14 @@ class FacebookCareTool(ctk.CTk):
             "comment_content": DEFAULT_COMMENT_CONTENT,
         })
         self.comment_content_save_job = None
+        self.account_refresh_job = None
+        self.account_render_job = None
+        self.account_render_generation = 0
+        self.history_refresh_job = None
+        self.history_render_job = None
+        self.history_render_generation = 0
+        self.browser_render_job = None
+        self.browser_render_generation = 0
         self.protocol("WM_DELETE_WINDOW", self.on_app_close)
 
         self.build_ui()
@@ -218,7 +230,7 @@ class FacebookCareTool(ctk.CTk):
             header, width=280, height=42, placeholder_text="Tìm kiếm tên / ghi chú..."
         )
         self.search_entry.grid(row=0, column=1, padx=10)
-        self.search_entry.bind("<KeyRelease>", lambda e: self.refresh_accounts())
+        self.search_entry.bind("<KeyRelease>", self.schedule_accounts_refresh)
 
         ctk.CTkButton(
             header, text="+ Thêm tài khoản", height=42, width=160, command=self.add_account_popup
@@ -574,7 +586,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(filters, text="Lọc account/status:").pack(side="left", padx=(0, 8))
         self.history_filter_entry = ctk.CTkEntry(filters, width=320, placeholder_text="Nhập tên account hoặc trạng thái...")
         self.history_filter_entry.pack(side="left")
-        self.history_filter_entry.bind("<KeyRelease>", lambda e: self.refresh_history_view())
+        self.history_filter_entry.bind("<KeyRelease>", self.schedule_history_refresh)
 
         body = ctk.CTkFrame(self.view_history, fg_color="transparent")
         body.grid(row=3, column=0, sticky="nsew", padx=25, pady=(0, 25))
@@ -906,15 +918,28 @@ class FacebookCareTool(ctk.CTk):
             self.after(0, lambda: messagebox.showinfo("Hoàn thành", "Đã chạy xong chiến dịch comment!"))
 
     # --- LOGIC TRÌNH DUYỆT / LỊCH SỬ / CÀI ĐẶT ---
+    def _cancel_browser_render_job(self):
+        if self.browser_render_job:
+            self.after_cancel(self.browser_render_job)
+            self.browser_render_job = None
+
     def refresh_browser_accounts(self):
         if not hasattr(self, "browser_accounts_scroll"):
             return
+        self._cancel_browser_render_job()
+        self.browser_render_generation += 1
+        generation = self.browser_render_generation
+
         for widget in self.browser_accounts_scroll.winfo_children():
             widget.destroy()
         if not self.accounts:
             ctk.CTkLabel(self.browser_accounts_scroll, text="Chưa có tài khoản nào.").pack(pady=20)
             return
-        for index, acc in enumerate(self.accounts):
+
+        accounts_snapshot = list(enumerate(self.accounts))
+        total = len(accounts_snapshot)
+
+        def render_browser_row(index, acc):
             row = ctk.CTkFrame(self.browser_accounts_scroll, fg_color="#1f2937" if index != self.browser_selected_index else "#263244", corner_radius=10)
             row.pack(fill="x", padx=4, pady=4)
             row.grid_columnconfigure(0, weight=1)
@@ -923,6 +948,19 @@ class FacebookCareTool(ctk.CTk):
             subtitle = f"Proxy: {acc.get('proxy') or 'Không dùng'} | Cookie: {os.path.basename(acc.get('cookie_file', '')) or 'Tự tạo khi login'}"
             ctk.CTkLabel(row, text=subtitle, text_color="#9ca3af", anchor="w").grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
             ctk.CTkButton(row, text="Chọn", width=70, command=lambda idx=index: self.select_browser_account(idx)).grid(row=0, column=1, rowspan=2, padx=12, pady=8)
+
+        def render_batch(start=0):
+            if generation != self.browser_render_generation:
+                return
+            end = min(start + BROWSER_RENDER_BATCH_SIZE, total)
+            for index, acc in accounts_snapshot[start:end]:
+                render_browser_row(index, acc)
+            if end < total:
+                self.browser_render_job = self.after(1, lambda: render_batch(end))
+            else:
+                self.browser_render_job = None
+
+        render_batch()
 
     def select_browser_account(self, index):
         self.browser_selected_index = index
@@ -944,10 +982,26 @@ class FacebookCareTool(ctk.CTk):
         self.refresh_browser_accounts()
         threading.Thread(target=self.open_browser, args=(account, target_url), daemon=True).start()
 
-    def refresh_history_view(self):
+    def schedule_history_refresh(self, event=None):
+        if self.history_refresh_job:
+            self.after_cancel(self.history_refresh_job)
+        self.history_refresh_job = self.after(220, lambda: self.refresh_history_view(reload_logs=False))
+
+    def _cancel_history_render_job(self):
+        if self.history_render_job:
+            self.after_cancel(self.history_render_job)
+            self.history_render_job = None
+
+    def refresh_history_view(self, reload_logs=True):
         if not hasattr(self, "history_scroll"):
             return
-        self.logs = self.storage.load_logs()
+        self.history_refresh_job = None
+        self._cancel_history_render_job()
+        self.history_render_generation += 1
+        generation = self.history_render_generation
+
+        if reload_logs:
+            self.logs = self.storage.load_logs()
         summary = summarize_logs(self.logs)
         account_summary = summarize_accounts(self.accounts)
         status_counts = summary["by_status"]
@@ -967,8 +1021,21 @@ class FacebookCareTool(ctk.CTk):
 
         if not logs:
             ctk.CTkLabel(self.history_scroll, text="Chưa có lịch sử phù hợp.", font=("Arial", 16)).pack(pady=30)
-        for log in logs:
-            self.history_log_row(log)
+        else:
+            total = len(logs)
+
+            def render_batch(start=0):
+                if generation != self.history_render_generation:
+                    return
+                end = min(start + HISTORY_RENDER_BATCH_SIZE, total)
+                for log in logs[start:end]:
+                    self.history_log_row(log)
+                if end < total:
+                    self.history_render_job = self.after(1, lambda: render_batch(end))
+                else:
+                    self.history_render_job = None
+
+            render_batch()
 
         text = [
             "TÀI KHOẢN HIỆN TẠI",
@@ -1210,7 +1277,22 @@ class FacebookCareTool(ctk.CTk):
         self.selected_card.configure(text=str(len(self.selected_accounts)))
         self.stat_label.configure(text=f"Tổng tài khoản: {len(self.accounts)}")
 
+    def schedule_accounts_refresh(self, event=None):
+        if self.account_refresh_job:
+            self.after_cancel(self.account_refresh_job)
+        self.account_refresh_job = self.after(180, self.refresh_accounts)
+
+    def _cancel_account_render_job(self):
+        if self.account_render_job:
+            self.after_cancel(self.account_render_job)
+            self.account_render_job = None
+
     def refresh_accounts(self):
+        self.account_refresh_job = None
+        self._cancel_account_render_job()
+        self.account_render_generation += 1
+        generation = self.account_render_generation
+
         for widget in self.account_container.winfo_children():
             widget.destroy()
 
@@ -1226,8 +1308,26 @@ class FacebookCareTool(ctk.CTk):
             ).pack(pady=40)
             return
 
-        for row, (i, acc) in enumerate(filtered):
-            self.account_row(row, i, acc)
+        total = len(filtered)
+        if total > ACCOUNT_RENDER_BATCH_SIZE:
+            ctk.CTkLabel(
+                self.account_container,
+                text=f"Đang tải {total} tài khoản theo từng lô để giao diện không bị đứng...",
+                text_color="#9ca3af",
+            ).pack(fill="x", padx=4, pady=(0, 8))
+
+        def render_batch(start=0):
+            if generation != self.account_render_generation:
+                return
+            end = min(start + ACCOUNT_RENDER_BATCH_SIZE, total)
+            for row, (i, acc) in enumerate(filtered[start:end], start=start):
+                self.account_row(row, i, acc)
+            if end < total:
+                self.account_render_job = self.after(1, lambda: render_batch(end))
+            else:
+                self.account_render_job = None
+
+        render_batch()
 
     def account_row(self, row, index, acc):
         row_frame = ctk.CTkFrame(
