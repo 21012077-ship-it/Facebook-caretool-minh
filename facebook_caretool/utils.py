@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import random
 import re
 from pathlib import Path
@@ -20,12 +21,34 @@ def load_json(path: str | os.PathLike[str], default: Any) -> Any:
         return default
 
 
+def dumps_json(data: Any) -> str:
+    return json.dumps(data, indent=4, ensure_ascii=False)
+
+
 def save_json(path: str | os.PathLike[str], data: Any) -> None:
     json_path = Path(path)
     if json_path.parent and str(json_path.parent) != ".":
         json_path.parent.mkdir(parents=True, exist_ok=True)
-    with json_path.open("w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
+
+    payload = dumps_json(data)
+    try:
+        if json_path.exists() and json_path.read_text(encoding="utf-8").rstrip("\n") == payload:
+            return
+    except OSError:
+        pass
+
+    target_dir = json_path.parent if str(json_path.parent) != "" else Path(".")
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target_dir, delete=False) as file:
+        temp_path = Path(file.name)
+        file.write(payload)
+        file.write("\n")
+    try:
+        os.replace(temp_path, json_path)
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        finally:
+            raise
 
 
 SUPPORTED_PROXY_SCHEMES = {"http", "https", "socks4", "socks5"}
