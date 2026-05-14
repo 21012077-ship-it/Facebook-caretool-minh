@@ -801,6 +801,7 @@ class FacebookCareTool(ctk.CTk):
             "text=Phản hồi",
             "text=Reply",
         ]
+        top_comment_fallbacks = []
 
         for scroll_round in range(6):
             if not self.wait_if_paused():
@@ -809,29 +810,74 @@ class FacebookCareTool(ctk.CTk):
             for selector in reply_selectors:
                 try:
                     reply_buttons = page.locator(selector)
-                    button_count = min(reply_buttons.count(), 8)
+                    button_count = min(reply_buttons.count(), 10)
                     for index in range(button_count):
                         button = reply_buttons.nth(index)
                         if not button.is_visible():
                             continue
 
-                        button.scroll_into_view_if_needed()
-                        if not self.interruptible_sleep(random.uniform(0.4, 0.9)):
-                            return False
+                        # Lưu vài nút Phản hồi đầu tiên làm phương án dự phòng.
+                        # Ưu tiên chính vẫn là comment đã có phản hồi/bình luận sẵn.
+                        if scroll_round == 0 and len(top_comment_fallbacks) < 5:
+                            top_comment_fallbacks.append(button)
 
-                        button.click()
-                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã bấm Phản hồi vào một comment có sẵn."))
-                        return True
+                        if not self.is_comment_with_existing_replies(button):
+                            continue
+
+                        if self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào comment đã có phản hồi sẵn."):
+                            return True
+                        return False
                 except Exception:
                     continue
 
             if scroll_round < 5:
-                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang tìm comment có sẵn để phản hồi..."))
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang tìm comment đã có phản hồi sẵn..."))
                 page.mouse.wheel(0, random.randint(500, 900))
                 if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
                     return False
 
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Không thấy comment đã có phản hồi sẵn, chuyển sang một comment ở đầu."))
+        for button in top_comment_fallbacks:
+            try:
+                if self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào một comment ở đầu."):
+                    return True
+                return False
+            except Exception:
+                continue
+
         return False
+
+    def is_comment_with_existing_replies(self, reply_button):
+        try:
+            return bool(reply_button.evaluate(
+                r"""
+                (button) => {
+                    const replyWords = /(phản hồi|reply|replies|trả lời|câu trả lời)/i;
+                    const threadedReplyText = /(xem|view|ẩn|hide|more|thêm|previous|trước|khác|other).{0,80}(phản hồi|repl(?:y|ies)|trả lời|câu trả lời)|\b\d+\s+(phản hồi|repl(?:y|ies)|trả lời|câu trả lời)\b/i;
+                    let node = button;
+                    for (let depth = 0; node && depth < 7; depth += 1) {
+                        const text = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+                        if (text && text !== 'Phản hồi' && text !== 'Reply' && threadedReplyText.test(text)) {
+                            return true;
+                        }
+                        node = node.parentElement;
+                    }
+                    const nearby = button.parentElement?.parentElement?.innerText || '';
+                    return replyWords.test(nearby) && threadedReplyText.test(nearby);
+                }
+                """
+            ))
+        except Exception:
+            return False
+
+    def click_reply_button(self, button, acc_name, success_message):
+        button.scroll_into_view_if_needed()
+        if not self.interruptible_sleep(random.uniform(0.4, 0.9)):
+            return False
+
+        button.click()
+        self.after(0, lambda n=acc_name, msg=success_message: self.append_live_log(f"[{n}] {msg}"))
+        return True
 
     def find_reply_comment_box(self, page):
         reply_box_selectors = [
