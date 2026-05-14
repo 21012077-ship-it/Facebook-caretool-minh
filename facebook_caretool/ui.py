@@ -1700,6 +1700,15 @@ class FacebookCareTool(ctk.CTk):
     def has_facebook_login_cookie(self, cookies):
         return self.automation_service.has_facebook_login_cookie(cookies)
 
+    def build_cookie_snapshot(self, cookies):
+        tracked_fields = ("name", "value", "domain", "path", "expires", "expirationDate")
+        return tuple(
+            sorted(
+                tuple(str(cookie.get(field, "")) for field in tracked_fields)
+                for cookie in cookies
+            )
+        )
+
     def safe_goto(self, page, url, account=None, wait_until="domcontentloaded", timeout=60000, retries=2, fallback_urls=None):
         """
         Điều hướng ổn định hơn khi Facebook/proxy trả về ERR_EMPTY_RESPONSE.
@@ -1885,6 +1894,7 @@ class FacebookCareTool(ctk.CTk):
     def wait_for_manual_browser_close(self, browser, context, page, account):
         account_name = account.get("name") or account.get("uid") or "Unknown"
         saved_cookie_path = None
+        saved_cookie_snapshot = None
         self.after(0, lambda n=account_name: self.append_live_log(
             f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ tự lưu cookie sau khi bạn đăng nhập; hãy tự đóng Chrome khi xong."
         ))
@@ -1897,14 +1907,16 @@ class FacebookCareTool(ctk.CTk):
             try:
                 current_cookies = context.cookies()
                 if self.has_facebook_login_cookie(current_cookies):
-                    account["status"] = "active"
-                    cookie_path = self.save_account_cookies(account, current_cookies)
-                    if cookie_path != saved_cookie_path:
-                        self.after(0, lambda n=account_name, path=cookie_path: self.append_live_log(
-                            f"[{n}] ✅ Đã phát hiện đăng nhập thủ công và lưu cookie: {path}"
-                        ))
-                    saved_cookie_path = cookie_path
-                    self.save_accounts()
+                    cookie_snapshot = self.build_cookie_snapshot(current_cookies)
+                    if cookie_snapshot != saved_cookie_snapshot:
+                        account["status"] = "active"
+                        cookie_path = self.save_account_cookies(account, current_cookies)
+                        if cookie_path != saved_cookie_path:
+                            self.after(0, lambda n=account_name, path=cookie_path: self.append_live_log(
+                                f"[{n}] ✅ Đã phát hiện đăng nhập thủ công và lưu cookie: {path}"
+                            ))
+                        saved_cookie_path = cookie_path
+                        saved_cookie_snapshot = cookie_snapshot
             except Exception as e:
                 self.after(0, lambda n=account_name, err=e: self.append_live_log(
                     f"[{n}] ⚠️ Chưa thể lưu cookie phiên thủ công: {err}"
