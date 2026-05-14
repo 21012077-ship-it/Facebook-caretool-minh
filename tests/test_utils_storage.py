@@ -6,6 +6,7 @@ from pathlib import Path
 from facebook_caretool.account_io import build_export_payload, merge_accounts, parse_import_payload
 from facebook_caretool.care_planner import build_care_plan, format_care_plan, recommend_care_profile
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
+from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
 from facebook_caretool.utils import build_comment_payloads, load_json, parse_delay, parse_proxy, save_json, spin_content
 
@@ -91,6 +92,31 @@ class UtilsTest(unittest.TestCase):
             build_comment_payloads("cmt 1\n\ncmt 2"),
             [{"text": "cmt 1", "media_path": ""}, {"text": "cmt 2", "media_path": ""}],
         )
+
+
+class AutomationServiceTest(unittest.TestCase):
+    def test_save_cookies_creates_default_path_and_detects_login_cookie(self):
+        service = AutomationService()
+        account = {"name": "Tài khoản A"}
+        cookies = [
+            {"name": "c_user", "value": "123", "domain": ".facebook.com", "path": "/"},
+            {"name": "xs", "value": "token", "domain": ".facebook.com", "path": "/"},
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_path = service.save_cookies(account, cookies, cookie_dir=str(Path(tmp) / "cookies"))
+
+            self.assertTrue(Path(cookie_path).exists())
+            self.assertEqual(account["cookie_file"], cookie_path)
+            self.assertTrue(service.has_facebook_login_cookie(cookies))
+
+    def test_has_facebook_login_cookie_ignores_non_login_cookies(self):
+        service = AutomationService()
+
+        self.assertFalse(service.has_facebook_login_cookie([
+            {"name": "datr", "value": "abc", "domain": ".facebook.com"},
+            {"name": "c_user", "value": "123", "domain": ".example.com"},
+        ]))
 
 
 class JsonStorageTest(unittest.TestCase):

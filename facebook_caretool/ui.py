@@ -535,6 +535,13 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkButton(right, text="💬 Messenger", height=42, fg_color="#374151", command=lambda: self.open_browser_selected_url("https://www.facebook.com/messages/")).pack(fill="x", padx=20, pady=6)
         ctk.CTkLabel(
             right,
+            text="Sau khi bạn đăng nhập thủ công, tool sẽ tự phát hiện cookie Facebook và lưu vào file cookie của account khi phiên trình duyệt còn mở.",
+            text_color="#a7f3d0",
+            wraplength=300,
+            justify="left",
+        ).pack(fill="x", padx=20, pady=(12, 0))
+        ctk.CTkLabel(
+            right,
             text="Nút mở chỉ mở trình duyệt để bạn thao tác thủ công; tool không tự đăng nhập, không tự chạy nuôi và không tự tắt cửa sổ.",
             text_color="#9ca3af",
             wraplength=300,
@@ -1544,6 +1551,16 @@ class FacebookCareTool(ctk.CTk):
     def create_browser_page(self, p, cookies, account=None):
         return self.automation_service.create_browser_page(p, cookies, account)
 
+    def save_account_cookies(self, account, cookies):
+        cookie_file = self.automation_service.save_cookies(account, cookies)
+        self.save_accounts()
+        self.after(0, self.refresh_accounts)
+        self.after(0, self.refresh_browser_accounts)
+        return cookie_file
+
+    def has_facebook_login_cookie(self, cookies):
+        return self.automation_service.has_facebook_login_cookie(cookies)
+
     def safe_goto(self, page, url, account=None, wait_until="domcontentloaded", timeout=60000, retries=2, fallback_urls=None):
         """
         Điều hướng ổn định hơn khi Facebook/proxy trả về ERR_EMPTY_RESPONSE.
@@ -1720,33 +1737,50 @@ class FacebookCareTool(ctk.CTk):
 
         # Lưu Cookie Mới
         new_cookies = context.cookies()
-        cookie_file = account.get("cookie_file")
-        if not cookie_file:
-            if not os.path.exists("cookies"): os.makedirs("cookies")
-            cookie_file = os.path.join("cookies", f"{uid}.json")
-            account["cookie_file"] = cookie_file
-
-        with open(cookie_file, "w", encoding="utf-8") as f:
-            json.dump(new_cookies, f, indent=4)
-
         account["status"] = "active"
+        self.save_account_cookies(account, new_cookies)
         self.save_accounts()
         self.after(0, self.refresh_accounts)
         return True
 
     def wait_for_manual_browser_close(self, browser, context, page, account):
         account_name = account.get("name") or account.get("uid") or "Unknown"
+        saved_cookie_path = None
         self.after(0, lambda n=account_name: self.append_live_log(
-            f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ giữ cửa sổ mở để bạn thao tác; hãy tự đóng Chrome khi xong."
+            f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ tự lưu cookie sau khi bạn đăng nhập; hãy tự đóng Chrome khi xong."
         ))
 
         while browser.is_connected():
             open_pages = [ctx_page for ctx_page in context.pages if not ctx_page.is_closed()]
             if not open_pages:
                 break
-            time.sleep(1)
 
-        self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Đã đóng phiên trình duyệt thủ công."))
+            try:
+                current_cookies = context.cookies()
+                if self.has_facebook_login_cookie(current_cookies):
+                    account["status"] = "active"
+                    cookie_path = self.save_account_cookies(account, current_cookies)
+                    if cookie_path != saved_cookie_path:
+                        self.after(0, lambda n=account_name, path=cookie_path: self.append_live_log(
+                            f"[{n}] ✅ Đã phát hiện đăng nhập thủ công và lưu cookie: {path}"
+                        ))
+                    saved_cookie_path = cookie_path
+                    self.save_accounts()
+            except Exception as e:
+                self.after(0, lambda n=account_name, err=e: self.append_live_log(
+                    f"[{n}] ⚠️ Chưa thể lưu cookie phiên thủ công: {err}"
+                ))
+
+            time.sleep(3)
+
+        if saved_cookie_path:
+            self.after(0, lambda n=account_name, path=saved_cookie_path: self.append_live_log(
+                f"[{n}] Đã đóng phiên trình duyệt thủ công. Cookie mới nhất đã lưu tại: {path}"
+            ))
+        else:
+            self.after(0, lambda n=account_name: self.append_live_log(
+                f"[{n}] Đã đóng phiên trình duyệt thủ công. Chưa phát hiện cookie đăng nhập Facebook để lưu."
+            ))
 
     def open_browser(self, account, start_url=None):
         """Mở browser thủ công, không kiểm tra cookie/UID/pass hay ép auto-login."""

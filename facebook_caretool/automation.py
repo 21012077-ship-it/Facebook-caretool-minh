@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 from typing import Any, Dict, List, Optional
 
 from .utils import parse_proxy
@@ -87,6 +88,33 @@ class AutomationService:
             return [self.normalize_cookie(cookie) for cookie in cookies_to_process]
         except Exception:
             return []
+
+    def build_cookie_path(self, account: Dict[str, Any], cookie_dir: str = "cookies") -> str:
+        cookie_file = str(account.get("cookie_file") or "").strip()
+        if cookie_file:
+            return cookie_file
+
+        raw_name = str(account.get("uid") or account.get("name") or "facebook_account").strip()
+        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", raw_name).strip("._") or "facebook_account"
+        return os.path.join(cookie_dir, f"{safe_name}.json")
+
+    def save_cookies(self, account: Dict[str, Any], cookies: List[Dict[str, Any]], cookie_dir: str = "cookies") -> str:
+        cookie_file = self.build_cookie_path(account, cookie_dir=cookie_dir)
+        parent_dir = os.path.dirname(cookie_file)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        with open(cookie_file, "w", encoding="utf-8") as file:
+            json.dump(cookies, file, indent=4, ensure_ascii=False)
+
+        account["cookie_file"] = cookie_file
+        return cookie_file
+
+    def has_facebook_login_cookie(self, cookies: List[Dict[str, Any]]) -> bool:
+        return any(
+            cookie.get("name") == "c_user" and "facebook.com" in str(cookie.get("domain", ""))
+            for cookie in cookies
+        )
 
     def parse_proxy(self, proxy_text: str | None) -> Optional[Dict[str, str]]:
         return parse_proxy(proxy_text)
