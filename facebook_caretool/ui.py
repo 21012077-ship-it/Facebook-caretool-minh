@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from playwright.sync_api import sync_playwright
@@ -61,6 +63,7 @@ class FacebookCareTool(ctk.CTk):
         self.task_pause_event = threading.Event()
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
+        self.log_lock = threading.Lock()
         self.browser_selected_index = None
         self.app_settings = self.load_json("settings.json", {
             "appearance": "dark",
@@ -336,7 +339,16 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(self.settings_box, text="Nghỉ giữa mỗi lần cuộn", anchor="w").pack(fill="x", padx=15)
         self.pause_seconds_var = ctk.StringVar(value="4-9")
         self.pause_menu = ctk.CTkOptionMenu(self.settings_box, values=["2-5", "4-9", "6-12", "10-20"], variable=self.pause_seconds_var, command=lambda _: self.refresh_selected_account_plan())
-        self.pause_menu.pack(fill="x", padx=15, pady=(4, 15))
+        self.pause_menu.pack(fill="x", padx=15, pady=(4, 10))
+
+        ctk.CTkLabel(self.settings_box, text="Số acc chạy đồng thời", anchor="w").pack(fill="x", padx=15)
+        self.max_parallel_care_var = ctk.StringVar(value="2")
+        self.max_parallel_care_menu = ctk.CTkOptionMenu(
+            self.settings_box,
+            values=["1", "2", "3", "4", "5"],
+            variable=self.max_parallel_care_var,
+        )
+        self.max_parallel_care_menu.pack(fill="x", padx=15, pady=(4, 15))
 
         self.auto_like_care_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
@@ -1413,6 +1425,7 @@ class FacebookCareTool(ctk.CTk):
             "join_groups": self.join_groups_var.get(),
             "join_group_chance": 0.35,
             "max_join_groups": 2,
+            "max_parallel_care": int(self.max_parallel_care_var.get()),
         }
 
     def get_account_care_plan(self, account, use_smart=None):
@@ -1613,6 +1626,7 @@ class FacebookCareTool(ctk.CTk):
         skipped_count = 0
         use_smart = self.smart_care_var.get()
 
+        care_jobs = []
         for index in index_list:
             if index < len(self.accounts):
                 account = self.accounts[index]
@@ -1630,13 +1644,38 @@ class FacebookCareTool(ctk.CTk):
                     continue
                 account["last_care"] = now
                 queued_count += 1
-                threading.Thread(target=self.care_account, args=(account, plan), daemon=True).start()
+                care_jobs.append((account, plan))
 
         self.save_accounts()
         self.refresh_accounts()
         if self.selected_index is not None:
             self.select_account(self.selected_index)
-        self.append_live_log(f"Đã đưa {queued_count} tài khoản vào hàng chờ nuôi thông minh. Bỏ qua {skipped_count} acc cần nghỉ/không chạy.")
+
+        max_parallel = max(1, min(global_settings.get("max_parallel_care", 2), queued_count or 1))
+        self.append_live_log(
+            f"Đã đưa {queued_count} tài khoản vào hàng chờ nuôi thông minh; "
+            f"chạy tối đa {max_parallel} acc cùng lúc. Bỏ qua {skipped_count} acc cần nghỉ/không chạy."
+        )
+        if care_jobs:
+            threading.Thread(target=self.run_care_queue, args=(care_jobs, max_parallel), daemon=True).start()
+
+    def run_care_queue(self, care_jobs, max_parallel):
+        """Chạy queue nuôi acc với giới hạn song song để tránh mở quá nhiều Chrome gây lag."""
+        futures = []
+        with ThreadPoolExecutor(max_workers=max_parallel) as executor:
+            for account, plan in care_jobs:
+                if self.is_task_stopped():
+                    break
+                futures.append(executor.submit(self.care_account, account, plan))
+                time.sleep(1.5)
+
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    self.after(0, lambda err=exc: self.append_live_log(f"⚠️ Lỗi worker nuôi acc: {err}"))
+
+        self.after(0, lambda: self.append_live_log("✅ Hàng chờ nuôi tài khoản đã kết thúc."))
 
     # --- BỘ LÕI BROWSER AUTOMATION (PLAYWRIGHT) ---
     def normalize_cookie(self, cookie):
@@ -2052,6 +2091,8 @@ class FacebookCareTool(ctk.CTk):
             self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Không tìm thấy nút tham gia group phù hợp trên màn hình."))
 
     def care_account(self, account, settings):
+        if self.is_task_stopped():
+            return
         try:
             cookies = self.load_cookies(account)
             start_time = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -2063,8 +2104,9 @@ class FacebookCareTool(ctk.CTk):
                 "profile": settings.get("profile_label", "Theo cấu hình"),
                 "plan": format_care_plan(settings),
             }
-            self.logs.append(log_item)
-            self.save_logs()
+            with self.log_lock:
+                self.logs.append(log_item)
+                self.save_logs()
             self.after(0, lambda name=account.get("name", ""), plan=format_care_plan(settings): self.append_live_log(f"Bắt đầu nuôi {name} theo kế hoạch: {plan}"))
 
             with sync_playwright() as p:
@@ -2091,7 +2133,8 @@ class FacebookCareTool(ctk.CTk):
 
                 log_item["status"] = "stopped" if self.is_task_stopped() else "done"
                 log_item["end_time"] = datetime.now().strftime("%d/%m/%Y %H:%M")
-                self.save_logs()
+                with self.log_lock:
+                    self.save_logs()
                 browser.close()
                 if self.is_task_stopped():
                     self.after(0, lambda name=account.get("name", ""): self.append_live_log(f"Đã dừng nuôi {name}."))
@@ -2099,8 +2142,9 @@ class FacebookCareTool(ctk.CTk):
                     self.after(0, lambda name=account.get("name", ""), plan=format_care_plan(settings): self.append_live_log(f"Hoàn tất nuôi {name}. Kế hoạch đã chạy: {plan}"))
 
         except Exception as e:
-            self.logs.append({"account": account.get("name", ""), "status": "error", "error": str(e), "time": datetime.now().strftime("%d/%m/%Y %H:%M")})
-            self.save_logs()
+            with self.log_lock:
+                self.logs.append({"account": account.get("name", ""), "status": "error", "error": str(e), "time": datetime.now().strftime("%d/%m/%Y %H:%M")})
+                self.save_logs()
             self.after(0, lambda name=account.get("name", ""), err=e: self.append_live_log(f"Lỗi khi nuôi {name}: {err}"))
 
 if __name__ == "__main__":
