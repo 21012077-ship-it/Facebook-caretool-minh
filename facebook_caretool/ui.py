@@ -502,7 +502,15 @@ class FacebookCareTool(ctk.CTk):
         self.limit_cmt_input = create_setting_row(right_panel, "Giới hạn comment / tài khoản:", "5")
 
         self.like_before_cmt_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(right_panel, text="Tự động thả Like trước khi Comment", variable=self.like_before_cmt_var).pack(anchor="w", padx=20, pady=10)
+        ctk.CTkCheckBox(right_panel, text="Tự động thả Like trước khi Comment", variable=self.like_before_cmt_var).pack(anchor="w", padx=20, pady=(10, 4))
+
+        ctk.CTkLabel(
+            right_panel,
+            text="Chế độ mới: nội dung sẽ được gửi vào nút Phản hồi/Reply của một comment có sẵn, không gửi thành comment mới.",
+            text_color="#a7f3d0",
+            wraplength=280,
+            justify="left",
+        ).pack(anchor="w", padx=20, pady=(0, 10))
 
         # GẮN COMMAND CHẠY COMMENT TẠI ĐÂY
         ctk.CTkButton(
@@ -786,6 +794,63 @@ class FacebookCareTool(ctk.CTk):
 
         return not self.is_task_stopped()
 
+    def click_existing_comment_reply_button(self, page, acc_name):
+        reply_selectors = [
+            "div[role='button'][aria-label='Phản hồi'], div[aria-label='Phản hồi']",
+            "div[role='button'][aria-label='Reply'], div[aria-label='Reply']",
+            "text=Phản hồi",
+            "text=Reply",
+        ]
+
+        for scroll_round in range(6):
+            if not self.wait_if_paused():
+                return False
+
+            for selector in reply_selectors:
+                try:
+                    reply_buttons = page.locator(selector)
+                    button_count = min(reply_buttons.count(), 8)
+                    for index in range(button_count):
+                        button = reply_buttons.nth(index)
+                        if not button.is_visible():
+                            continue
+
+                        button.scroll_into_view_if_needed()
+                        if not self.interruptible_sleep(random.uniform(0.4, 0.9)):
+                            return False
+
+                        button.click()
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã bấm Phản hồi vào một comment có sẵn."))
+                        return True
+                except Exception:
+                    continue
+
+            if scroll_round < 5:
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang tìm comment có sẵn để phản hồi..."))
+                page.mouse.wheel(0, random.randint(500, 900))
+                if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
+                    return False
+
+        return False
+
+    def find_reply_comment_box(self, page):
+        reply_box_selectors = [
+            'div[role="textbox"][contenteditable="true"][aria-label*="phản hồi" i]',
+            'div[role="textbox"][contenteditable="true"][aria-label*="reply" i]',
+            'div[role="textbox"][contenteditable="true"][aria-label*="trả lời" i]',
+            'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
+        ]
+
+        for selector in reply_box_selectors:
+            try:
+                reply_box = page.locator(selector).last
+                reply_box.wait_for(state="visible", timeout=5000)
+                return reply_box
+            except Exception:
+                continue
+
+        raise RuntimeError("Không tìm thấy ô nhập phản hồi")
+
     def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
@@ -862,7 +927,13 @@ class FacebookCareTool(ctk.CTk):
 
                         comment_success = False
                         try:
-                            comment_box = page.locator('div[role="textbox"][contenteditable="true"][aria-label="Viết bình luận..."], div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]').last
+                            if not self.click_existing_comment_reply_button(page, acc_name):
+                                raise RuntimeError("Không tìm thấy nút Phản hồi/Reply của comment có sẵn")
+
+                            if not self.interruptible_sleep(random.uniform(1, 2)):
+                                break
+
+                            comment_box = self.find_reply_comment_box(page)
                             comment_box.scroll_into_view_if_needed()
                             comment_box.wait_for(state="visible", timeout=10000)
 
@@ -870,7 +941,7 @@ class FacebookCareTool(ctk.CTk):
                             if not self.interruptible_sleep(random.uniform(1, 2)):
                                 break
 
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang gõ: '{final_content[:20]}...'"))
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang gõ phản hồi: '{final_content[:20]}...'"))
 
                             page.keyboard.press("Control+A")
                             page.keyboard.press("Backspace")
@@ -883,7 +954,7 @@ class FacebookCareTool(ctk.CTk):
 
                             if selected_image_path:
                                 image_name = os.path.basename(selected_image_path)
-                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng comment: {img}"))
+                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng phản hồi: {img}"))
                                 try:
                                     with page.expect_file_chooser(timeout=8000) as fc_info:
                                         attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
@@ -894,7 +965,7 @@ class FacebookCareTool(ctk.CTk):
                                     if not self.interruptible_sleep(random.uniform(4, 7)):
                                         break
 
-                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã đính kèm, chuẩn bị gửi chung text + ảnh/video..."))
+                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã đính kèm, chuẩn bị gửi phản hồi chung text + ảnh/video..."))
                                     comment_box.click()
                                     if not self.interruptible_sleep(1.5):
                                         break
@@ -905,10 +976,10 @@ class FacebookCareTool(ctk.CTk):
                             page.keyboard.press("Enter")
                             comment_success = True
 
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Comment thành công!"))
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Phản hồi comment thành công!"))
 
                         except Exception as e:
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Lỗi: Không thể tương tác với ô comment."))
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Lỗi: Không thể phản hồi vào comment có sẵn."))
 
                         delay_sec = self.get_pause_seconds(delay_range)
                         if comment_success:
