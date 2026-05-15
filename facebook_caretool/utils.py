@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import hmac
 import json
 import os
-import tempfile
 import random
 import re
+import struct
+import tempfile
+import time as time_module
 from pathlib import Path
 from urllib.parse import urlsplit
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -49,6 +55,42 @@ def save_json(path: str | os.PathLike[str], data: Any) -> None:
             temp_path.unlink(missing_ok=True)
         finally:
             raise
+
+
+def generate_totp_code(
+    secret: str | None,
+    *,
+    for_time: float | None = None,
+    period: int = 30,
+    digits: int = 6,
+) -> str | None:
+    """Generate a TOTP 2FA code from a Base32 secret using RFC 6238.
+
+    The helper accepts secrets copied from Facebook with spaces, lower-case
+    characters, or missing Base32 padding. It returns ``None`` for invalid
+    secrets so the UI can show a friendly validation message instead of
+    crashing during login automation.
+    """
+    normalized_secret = (secret or "").replace(" ", "").upper()
+    if not normalized_secret or period <= 0 or digits <= 0:
+        return None
+
+    padding = len(normalized_secret) % 8
+    if padding:
+        normalized_secret += "=" * (8 - padding)
+
+    try:
+        key = base64.b32decode(normalized_secret, casefold=True)
+    except (binascii.Error, ValueError):
+        return None
+
+    timestamp = time_module.time() if for_time is None else for_time
+    counter = int(timestamp // period)
+    counter_bytes = struct.pack(">Q", counter)
+    digest = hmac.new(key, counter_bytes, hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    binary_code = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF
+    return str(binary_code % (10**digits)).zfill(digits)
 
 
 SUPPORTED_PROXY_SCHEMES = {"http", "https", "socks4", "socks5"}

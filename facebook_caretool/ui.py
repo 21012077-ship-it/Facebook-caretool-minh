@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
@@ -9,15 +10,13 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import build_comment_payloads, load_json, random_delay, save_json, spin_content
+from .utils import build_comment_payloads, generate_totp_code, load_json, random_delay, save_json, spin_content
 import json
 import os
 import threading
 import time
 import random
 from datetime import datetime
-import pyotp  # Thư viện mới thêm để lấy mã 2FA
-
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content."
@@ -29,20 +28,6 @@ HISTORY_RENDER_BATCH_SIZE = 60
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-def get_2fa_code(secret):
-    try:
-        # Làm sạch chuỗi: bỏ khoảng trắng, in hoa toàn bộ
-        secret = secret.replace(" ", "").upper()
-
-        # Thêm dấu '=' cho đủ độ dài padding của Base32
-        padding = len(secret) % 8
-        if padding != 0:
-            secret += "=" * (8 - padding)
-
-        totp = pyotp.TOTP(secret)
-        return totp.now()
-    except Exception as e:
-        return None
 
 class FacebookCareTool(ctk.CTk):
     def __init__(self):
@@ -801,7 +786,7 @@ class FacebookCareTool(ctk.CTk):
             "text=Phản hồi",
             "text=Reply",
         ]
-        top_comment_fallbacks = []
+        top_comment_fallbacks: list[Any] = []
 
         for scroll_round in range(6):
             if not self.wait_if_paused():
@@ -914,7 +899,7 @@ class FacebookCareTool(ctk.CTk):
                 ),
             )
 
-        acc_tasks = {acc_idx: [] for acc_idx in account_indexes}
+        acc_tasks: dict[int, list[str]] = {acc_idx: [] for acc_idx in account_indexes}
         skipped_urls = 0
         for url in urls:
             available_accounts = [idx for idx in account_indexes if len(acc_tasks[idx]) < comment_limit]
@@ -1948,7 +1933,7 @@ class FacebookCareTool(ctk.CTk):
             two_fa_box.wait_for(state="visible", timeout=15000)
 
             # Nếu code vượt qua được dòng wait_for bên trên, nghĩa là ô 2FA chắc chắn đã hiển thị
-            code = get_2fa_code(two_fa)
+            code = generate_totp_code(two_fa)
             if code:
                 self.after(0, lambda: self.append_live_log(f"[{uid}] Đã sinh mã: {code}. Đang nhập..."))
 
