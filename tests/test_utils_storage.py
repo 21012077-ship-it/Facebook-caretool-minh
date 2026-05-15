@@ -8,7 +8,7 @@ from facebook_caretool.care_planner import build_care_plan, format_care_plan, re
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
-from facebook_caretool.utils import build_comment_payloads, load_json, parse_delay, parse_proxy, save_json, spin_content
+from facebook_caretool.utils import build_comment_payloads, generate_totp_code, load_json, parse_delay, parse_proxy, save_json, spin_content
 
 
 class UtilsTest(unittest.TestCase):
@@ -92,6 +92,15 @@ class UtilsTest(unittest.TestCase):
             build_comment_payloads("cmt 1\n\ncmt 2"),
             [{"text": "cmt 1", "media_path": ""}, {"text": "cmt 2", "media_path": ""}],
         )
+
+    def test_generate_totp_code_uses_rfc6238_vector(self):
+        secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+        self.assertEqual(generate_totp_code(secret, for_time=59, digits=8), "94287082")
+
+    def test_generate_totp_code_normalizes_secret_and_rejects_invalid_values(self):
+        self.assertEqual(generate_totp_code(" jbsw y3dp ", for_time=0), "050147")
+        self.assertIsNone(generate_totp_code("not valid !!!", for_time=0))
+        self.assertIsNone(generate_totp_code("", for_time=0))
 
 
 class AutomationServiceTest(unittest.TestCase):

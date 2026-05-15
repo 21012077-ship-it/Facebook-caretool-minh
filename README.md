@@ -64,6 +64,7 @@ python main.py
 ```bash
 python -m unittest discover -s tests -v
 python -m compileall main.py facebook_caretool tests
+python -m mypy
 ```
 
 ## Dữ liệu local không nên commit
@@ -80,4 +81,4 @@ Nếu những file này đã từng được commit, hãy xoá khỏi index bằ
 
 ## Hướng cải thiện đề xuất
 
-Xem chi tiết trong [ROADMAP.md](ROADMAP.md). Ưu tiên cao nhất hiện tại là bảo mật dữ liệu local, chuẩn hoá packaging/runbook, bổ sung lint/type-check và tách nhỏ `ui.py` để test dễ hơn.
+Xem chi tiết trong [ROADMAP.md](ROADMAP.md). Ưu tiên cao nhất hiện tại là bảo mật dữ liệu local, chuẩn hoá packaging/runbook, duy trì type-check bằng `mypy` và tách nhỏ `ui.py` để test dễ hơn.
