@@ -491,7 +491,7 @@ class FacebookCareTool(ctk.CTk):
 
         ctk.CTkLabel(
             right_panel,
-            text="Chế độ mới: nội dung sẽ được gửi vào nút Phản hồi/Reply của một comment có sẵn, không gửi thành comment mới.",
+            text="Chế độ mới: ưu tiên gửi vào nút Phản hồi/Reply của comment có sẵn; nếu không thấy comment để trả lời thì comment thẳng vào bài.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -882,6 +882,113 @@ class FacebookCareTool(ctk.CTk):
 
         raise RuntimeError("Không tìm thấy ô nhập phản hồi")
 
+    def focus_post_comment_box(self, page, acc_name):
+        comment_entry_selectors = [
+            'div[role="textbox"][contenteditable="true"][aria-label*="bình luận" i]',
+            'div[role="textbox"][contenteditable="true"][aria-label*="comment" i]',
+            'div[role="textbox"][contenteditable="true"][aria-label*="viết" i]',
+            'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
+        ]
+        comment_button_selectors = [
+            "div[role='button'][aria-label='Bình luận'], div[aria-label='Bình luận']",
+            "div[role='button'][aria-label='Comment'], div[aria-label='Comment']",
+            "text=Bình luận",
+            "text=Comment",
+        ]
+
+        for scroll_round in range(4):
+            if not self.wait_if_paused():
+                return None
+
+            for selector in comment_entry_selectors:
+                try:
+                    comment_boxes = page.locator(selector)
+                    box_count = min(comment_boxes.count(), 8)
+                    for index in range(box_count):
+                        comment_box = comment_boxes.nth(index)
+                        if comment_box.is_visible():
+                            comment_box.scroll_into_view_if_needed()
+                            comment_box.click()
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Không thấy comment để trả lời, chuyển sang comment thẳng vào bài."))
+                            return comment_box
+                except Exception:
+                    continue
+
+            for selector in comment_button_selectors:
+                try:
+                    comment_buttons = page.locator(selector)
+                    button_count = min(comment_buttons.count(), 5)
+                    for index in range(button_count):
+                        button = comment_buttons.nth(index)
+                        if not button.is_visible():
+                            continue
+                        button.scroll_into_view_if_needed()
+                        button.click()
+                        if not self.interruptible_sleep(random.uniform(0.8, 1.5)):
+                            return None
+                        for box_selector in comment_entry_selectors:
+                            try:
+                                comment_box = page.locator(box_selector).last
+                                comment_box.wait_for(state="visible", timeout=5000)
+                                comment_box.click()
+                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Không thấy comment để trả lời, chuyển sang comment thẳng vào bài."))
+                                return comment_box
+                            except Exception:
+                                continue
+                except Exception:
+                    continue
+
+            if scroll_round < 3:
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang tìm ô comment của bài viết..."))
+                page.mouse.wheel(0, -600 if scroll_round == 0 else 600)
+                if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
+                    return None
+
+        raise RuntimeError("Không tìm thấy ô nhập comment của bài viết")
+
+    def type_and_submit_comment(self, page, comment_box, final_content, selected_image_path, acc_name, action_name):
+        comment_box.scroll_into_view_if_needed()
+        comment_box.wait_for(state="visible", timeout=10000)
+
+        comment_box.click()
+        if not self.interruptible_sleep(random.uniform(1, 2)):
+            return False
+
+        self.after(0, lambda n=acc_name, action=action_name: self.append_live_log(f"[{n}] Đang gõ {action}: '{final_content[:20]}...'"))
+
+        page.keyboard.press("Control+A")
+        page.keyboard.press("Backspace")
+        if not self.interruptible_sleep(0.5):
+            return False
+
+        page.keyboard.type(final_content, delay=random.uniform(50, 120))
+        if not self.interruptible_sleep(random.uniform(1.5, 2.5)):
+            return False
+
+        if selected_image_path:
+            image_name = os.path.basename(selected_image_path)
+            self.after(0, lambda n=acc_name, img=image_name, action=action_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng {action}: {img}"))
+            try:
+                with page.expect_file_chooser(timeout=8000) as fc_info:
+                    attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
+                    attach_btn.click()
+
+                file_chooser = fc_info.value
+                file_chooser.set_files(selected_image_path)
+                if not self.interruptible_sleep(random.uniform(4, 7)):
+                    return False
+
+                self.after(0, lambda n=acc_name, action=action_name: self.append_live_log(f"[{n}] Đã đính kèm, chuẩn bị gửi {action} chung text + ảnh/video..."))
+                comment_box.click()
+                if not self.interruptible_sleep(1.5):
+                    return False
+            except Exception:
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Không gửi comment vì ảnh/video đi kèm chưa đính kèm được."))
+                raise
+
+        page.keyboard.press("Enter")
+        return True
+
     def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
@@ -958,59 +1065,36 @@ class FacebookCareTool(ctk.CTk):
 
                         comment_success = False
                         try:
-                            if not self.click_existing_comment_reply_button(page, acc_name):
-                                raise RuntimeError("Không tìm thấy nút Phản hồi/Reply của comment có sẵn")
+                            is_reply_mode = self.click_existing_comment_reply_button(page, acc_name)
+                            if is_reply_mode:
+                                if not self.interruptible_sleep(random.uniform(1, 2)):
+                                    break
+                                comment_box = self.find_reply_comment_box(page)
+                                action_name = "phản hồi"
+                            else:
+                                comment_box = self.focus_post_comment_box(page, acc_name)
+                                action_name = "comment"
+                                if comment_box is None:
+                                    break
 
-                            if not self.interruptible_sleep(random.uniform(1, 2)):
+                            if not self.type_and_submit_comment(
+                                page,
+                                comment_box,
+                                final_content,
+                                selected_image_path,
+                                acc_name,
+                                action_name,
+                            ):
                                 break
 
-                            comment_box = self.find_reply_comment_box(page)
-                            comment_box.scroll_into_view_if_needed()
-                            comment_box.wait_for(state="visible", timeout=10000)
-
-                            comment_box.click()
-                            if not self.interruptible_sleep(random.uniform(1, 2)):
-                                break
-
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đang gõ phản hồi: '{final_content[:20]}...'"))
-
-                            page.keyboard.press("Control+A")
-                            page.keyboard.press("Backspace")
-                            if not self.interruptible_sleep(0.5):
-                                break
-
-                            page.keyboard.type(final_content, delay=random.uniform(50, 120))
-                            if not self.interruptible_sleep(random.uniform(1.5, 2.5)):
-                                break
-
-                            if selected_image_path:
-                                image_name = os.path.basename(selected_image_path)
-                                self.after(0, lambda n=acc_name, img=image_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng phản hồi: {img}"))
-                                try:
-                                    with page.expect_file_chooser(timeout=8000) as fc_info:
-                                        attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
-                                        attach_btn.click()
-
-                                    file_chooser = fc_info.value
-                                    file_chooser.set_files(selected_image_path)
-                                    if not self.interruptible_sleep(random.uniform(4, 7)):
-                                        break
-
-                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Đã đính kèm, chuẩn bị gửi phản hồi chung text + ảnh/video..."))
-                                    comment_box.click()
-                                    if not self.interruptible_sleep(1.5):
-                                        break
-                                except Exception as e:
-                                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Không gửi comment vì ảnh/video đi kèm chưa đính kèm được."))
-                                    raise
-
-                            page.keyboard.press("Enter")
                             comment_success = True
-
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Phản hồi comment thành công!"))
+                            if is_reply_mode:
+                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Phản hồi comment thành công!"))
+                            else:
+                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Comment thẳng vào bài thành công!"))
 
                         except Exception as e:
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Lỗi: Không thể phản hồi vào comment có sẵn."))
+                            self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment/phản hồi. {err[:80]}"))
 
                         delay_sec = self.get_pause_seconds(delay_range)
                         if comment_success:
