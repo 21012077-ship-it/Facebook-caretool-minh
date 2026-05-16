@@ -10,7 +10,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 - Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng, hỗ trợ HTTP/HTTPS/SOCKS4/SOCKS5.
 - Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
 - Campaign comment theo danh sách URL, nội dung spin/fallback và giới hạn comment theo account.
-- Tự quét nội dung bài viết để tạo comment phù hợp ngữ cảnh; có thể để trống ô mẫu khi bật chế độ tự tạo comment, và tool sẽ ưu tiên gọi AI OpenAI-compatible nếu đã cấu hình API key.
+
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
 - Import/export account an toàn, mặc định ẩn password và 2FA.
