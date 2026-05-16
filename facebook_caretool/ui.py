@@ -10,7 +10,7 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import build_comment_payloads, generate_totp_code, load_json, random_delay, save_json, spin_content
+from .utils import build_comment_payloads, build_contextual_facebook_comment, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, spin_content
 import json
 import os
 import threading
@@ -56,6 +56,10 @@ class FacebookCareTool(ctk.CTk):
             "export_sensitive_default": False,
             "import_overwrite_default": False,
             "comment_content": DEFAULT_COMMENT_CONTENT,
+            "ai_comment_enabled": True,
+            "ai_comment_base_url": "https://api.openai.com/v1/chat/completions",
+            "ai_comment_model": "gpt-4o-mini",
+            "ai_comment_api_key": "",
         })
         self.comment_content_save_job = None
         self.account_refresh_job = None
@@ -490,9 +494,16 @@ class FacebookCareTool(ctk.CTk):
         self.like_before_cmt_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(right_panel, text="Tự động thả Like trước khi Comment", variable=self.like_before_cmt_var).pack(anchor="w", padx=20, pady=(10, 4))
 
+        self.scan_before_cmt_var = ctk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            right_panel,
+            text="Quét nội dung và dùng AI tạo comment phù hợp",
+            variable=self.scan_before_cmt_var,
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+
         ctk.CTkLabel(
             right_panel,
-            text="Chế độ mới: ưu tiên gửi vào nút Phản hồi/Reply của comment có sẵn; nếu không thấy comment để trả lời thì comment thẳng vào bài.",
+            text="Chế độ mới: tool đọc nội dung bài/comment, gọi AI tạo câu trả lời ngẫu nhiên theo ngữ cảnh, rồi kiểm tra dấu hiệu spam cơ bản; không đảm bảo Facebook luôn hiển thị comment.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -630,8 +641,34 @@ class FacebookCareTool(ctk.CTk):
         self.default_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
         ctk.CTkButton(general, text="Lưu cài đặt", width=140, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(0, 16))
 
+        ai_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
+        ai_frame.grid(row=1, column=0, sticky="ew", pady=12)
+        ctk.CTkLabel(ai_frame, text="AI tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
+        ctk.CTkLabel(
+            ai_frame,
+            text="Nhập API key/model OpenAI-compatible để tool tạo comment ngẫu nhiên theo nội dung bài. Nếu thiếu key hoặc API lỗi, tool sẽ dùng fallback an toàn.",
+            text_color="#a7f3d0",
+            wraplength=850,
+            justify="left",
+        ).pack(fill="x", padx=18, pady=(0, 10))
+        self.ai_comment_enabled_var = ctk.BooleanVar(value=bool(self.app_settings.get("ai_comment_enabled", True)))
+        ctk.CTkCheckBox(ai_frame, text="Bật AI tạo comment theo ngữ cảnh", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
+        ctk.CTkLabel(ai_frame, text="API Key", anchor="w").pack(fill="x", padx=18, pady=(8, 0))
+        self.ai_comment_api_key_entry = ctk.CTkEntry(ai_frame, show="*")
+        self.ai_comment_api_key_entry.pack(fill="x", padx=18, pady=(4, 8))
+        self.ai_comment_api_key_entry.insert(0, self.app_settings.get("ai_comment_api_key", ""))
+        ctk.CTkLabel(ai_frame, text="Model", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
+        self.ai_comment_model_entry = ctk.CTkEntry(ai_frame)
+        self.ai_comment_model_entry.pack(fill="x", padx=18, pady=(4, 8))
+        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gpt-4o-mini"))
+        ctk.CTkLabel(ai_frame, text="Base URL Chat Completions", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
+        self.ai_comment_base_url_entry = ctk.CTkEntry(ai_frame)
+        self.ai_comment_base_url_entry.pack(fill="x", padx=18, pady=(4, 12))
+        self.ai_comment_base_url_entry.insert(0, self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions"))
+        ctk.CTkButton(ai_frame, text="Lưu cài đặt AI", width=140, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(0, 16))
+
         io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
-        io_frame.grid(row=1, column=0, sticky="ew", pady=12)
+        io_frame.grid(row=2, column=0, sticky="ew", pady=12)
         ctk.CTkLabel(io_frame, text="Import / Export account an toàn", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(io_frame, text="Export mặc định sẽ bỏ password và mã 2FA. Chỉ bật tùy chọn bên dưới khi bạn thật sự cần sao lưu đầy đủ vào nơi an toàn.", text_color="#fbbf24", wraplength=850, justify="left").pack(fill="x", padx=18, pady=(0, 10))
         self.export_sensitive_var = ctk.BooleanVar(value=bool(self.app_settings.get("export_sensitive_default", False)))
@@ -644,7 +681,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkButton(action_row, text="⬆ Import accounts", width=170, fg_color="#2563eb", command=self.import_accounts_safe).pack(side="left")
 
         info = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
-        info.grid(row=2, column=0, sticky="ew", pady=12)
+        info.grid(row=3, column=0, sticky="ew", pady=12)
         ctk.CTkLabel(info, text="Dữ liệu", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         self.settings_data_label = ctk.CTkLabel(info, text="", justify="left", anchor="w")
         self.settings_data_label.pack(fill="x", padx=18, pady=(0, 16))
@@ -750,10 +787,20 @@ class FacebookCareTool(ctk.CTk):
         selected_indexes = list(self.comment_selected_accounts)
         max_parallel_tabs = min(max_parallel_tabs, len(selected_indexes))
         like_before_comment = self.like_before_cmt_var.get()
+        scan_before_comment = self.scan_before_cmt_var.get()
 
         threading.Thread(
             target=self.run_comment_task,
-            args=(selected_indexes, urls, raw_content, comment_limit, comment_image_paths, max_parallel_tabs, like_before_comment),
+            args=(
+                selected_indexes,
+                urls,
+                raw_content,
+                comment_limit,
+                comment_image_paths,
+                max_parallel_tabs,
+                like_before_comment,
+                scan_before_comment,
+            ),
             daemon=True
         ).start()
 
@@ -791,6 +838,68 @@ class FacebookCareTool(ctk.CTk):
                 return False
 
         return not self.is_task_stopped()
+
+    def scan_facebook_content_before_comment(self, page, acc_name):
+        """Lướt và đọc nhanh nội dung bài/comment hiện có trước khi tạo comment."""
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Đang quét nội dung Facebook để tạo comment phù hợp..."))
+
+        see_more_selectors = [
+            "text=Xem thêm",
+            "text=See more",
+            "div[role='button']:has-text('Xem thêm')",
+            "div[role='button']:has-text('See more')",
+        ]
+        for selector in see_more_selectors:
+            try:
+                buttons = page.locator(selector)
+                for index in range(min(buttons.count(), 3)):
+                    button = buttons.nth(index)
+                    if button.is_visible():
+                        button.click()
+                        if not self.interruptible_sleep(random.uniform(0.4, 0.8)):
+                            return None
+            except Exception:
+                continue
+
+        for scroll_round in range(3):
+            if not self.wait_if_paused():
+                return None
+            try:
+                page.mouse.wheel(0, 300 if scroll_round < 2 else -200)
+            except Exception:
+                pass
+            if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
+                return None
+
+        try:
+            scanned_text = page.evaluate(
+                r"""
+                () => {
+                    const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+                    const roots = [
+                        document.querySelector('div[role="article"]'),
+                        document.querySelector('div[role="main"]'),
+                        document.body,
+                    ].filter(Boolean);
+                    const candidates = roots
+                        .map((root) => normalize(root.innerText || root.textContent || ''))
+                        .filter(Boolean);
+                    candidates.sort((a, b) => b.length - a.length);
+                    return (candidates[0] || '').slice(0, 500);
+                }
+                """
+            )
+        except Exception as exc:
+            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không đọc được nội dung bài, sẽ dùng mẫu dự phòng: {err[:60]}..."))
+            return ""
+
+        if scanned_text:
+            preview = scanned_text[:120] + ("..." if len(scanned_text) > 120 else "")
+            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] ✅ Đã quét nội dung: {text}"))
+            return scanned_text
+
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không thấy text rõ ràng sau khi quét, sẽ dùng mẫu dự phòng."))
+        return ""
 
     def click_existing_comment_reply_button(self, page, acc_name):
         """Chọn vị trí comment theo ưu tiên nghiệp vụ.
@@ -1098,7 +1207,42 @@ class FacebookCareTool(ctk.CTk):
         page.keyboard.press("Enter")
         return True
 
-    def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None, max_parallel_tabs=1, like_before_comment=True):
+    def get_ai_comment_settings(self):
+        return {
+            "enabled": bool(self.app_settings.get("ai_comment_enabled", True)),
+            "api_key": self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", ""),
+            "model": self.app_settings.get("ai_comment_model", "gpt-4o-mini"),
+            "base_url": self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions"),
+        }
+
+    def build_comment_from_scanned_content(self, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
+        if ai_comment_settings.get("enabled"):
+            ai_comment = generate_ai_facebook_comment(
+                scanned_post_text,
+                fallback_content,
+                api_key=ai_comment_settings.get("api_key", ""),
+                model=ai_comment_settings.get("model", "gpt-4o-mini"),
+                base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
+            )
+            if ai_comment:
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🤖 AI đã tạo comment ngẫu nhiên theo bài viết."))
+                return ai_comment
+
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, dùng fallback an toàn."))
+
+        return build_contextual_facebook_comment(scanned_post_text, fallback_content)
+
+    def run_comment_task(
+        self,
+        account_indexes,
+        urls,
+        raw_content,
+        comment_limit,
+        comment_image_paths=None,
+        max_parallel_tabs=1,
+        like_before_comment=True,
+        scan_before_comment=True,
+    ):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
         comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
@@ -1112,6 +1256,15 @@ class FacebookCareTool(ctk.CTk):
                 0,
                 lambda count=len(comment_image_paths): self.append_live_log(
                     f"📷 Ảnh/video sẽ đi kèm từng comment (không gửi tách riêng). Đang dùng {count} file."
+                ),
+            )
+
+        ai_comment_settings = self.get_ai_comment_settings()
+        if scan_before_comment and ai_comment_settings.get("enabled") and not ai_comment_settings.get("api_key"):
+            self.after(
+                0,
+                lambda: self.append_live_log(
+                    "⚠️ Chưa cấu hình API key AI, tool sẽ dùng fallback an toàn khi tạo comment."
                 ),
             )
 
@@ -1163,7 +1316,8 @@ class FacebookCareTool(ctk.CTk):
                         if not self.wait_if_paused():
                             break
                         comment_payload = random.choice(comment_payloads)
-                        final_content = spin_content(comment_payload["text"])
+                        fallback_content = spin_content(comment_payload["text"])
+                        final_content = fallback_content
                         selected_image_path = comment_payload.get("media_path") or None
 
                         self.after(0, lambda n=acc_name, u=url: self.append_live_log(f"[{n}] Đang vào bài: {u[:40]}..."))
@@ -1174,6 +1328,23 @@ class FacebookCareTool(ctk.CTk):
                         page.mouse.wheel(0, 500)
                         if not self.interruptible_sleep(2):
                             break
+
+                        if scan_before_comment:
+                            scanned_post_text = self.scan_facebook_content_before_comment(page, acc_name)
+                            if scanned_post_text is None:
+                                break
+                            final_content = self.build_comment_from_scanned_content(
+                                scanned_post_text,
+                                fallback_content,
+                                acc_name,
+                                ai_comment_settings,
+                            )
+                            self.after(
+                                0,
+                                lambda n=acc_name, text=final_content: self.append_live_log(
+                                    f"[{n}] 💬 Comment phù hợp đã chọn: {text}"
+                                ),
+                            )
 
                         if like_before_comment:
                             try:
@@ -1430,6 +1601,13 @@ class FacebookCareTool(ctk.CTk):
         self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
         self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
         self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
+        if hasattr(self, "ai_comment_enabled_var"):
+            self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
+            self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
+            self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+            self.app_settings["ai_comment_base_url"] = (
+                self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+            )
         self.save_json("settings.json", self.app_settings)
         if hasattr(self, "browser_url_entry"):
             self.browser_url_entry.delete(0, "end")

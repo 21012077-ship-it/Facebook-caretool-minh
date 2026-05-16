@@ -11,6 +11,8 @@ import re
 import struct
 import tempfile
 import time as time_module
+import urllib.error
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -160,6 +162,195 @@ def random_delay(delay_text: str | None, default: Tuple[float, float] = (4.0, 9.
     minimum, maximum = parse_delay(delay_text, default)
     return random.uniform(minimum, maximum)
 
+
+
+FACEBOOK_COMMENT_BLOCKLIST_PATTERNS = [
+    r"https?://",
+    r"www\.",
+    r"\b(?:zalo|telegram|whatsapp|inbox|ib|dm|pm)\b",
+    r"\b(?:mua ngay|giảm giá|khuyến mãi|chốt đơn|đặt hàng|kiếm tiền|tuyển sỉ|tuyển ctv)\b",
+    r"\b\d{9,11}\b",
+    r"[#@]{2,}",
+]
+
+COMMENT_CATEGORY_TEMPLATES: Dict[str, List[str]] = {
+    "question": [
+        "Câu hỏi này hay, mình cũng muốn xem thêm chia sẻ từ mọi người.",
+        "Nội dung này đáng để thảo luận thêm, cảm ơn bạn đã nêu vấn đề.",
+        "Mình thấy chủ đề này khá hữu ích, theo dõi thêm ý kiến của mọi người.",
+    ],
+    "congratulation": [
+        "Chúc mừng bạn, thông tin rất tích cực và đáng vui.",
+        "Tin vui quá, chúc mọi việc tiếp tục thuận lợi nhé.",
+        "Chúc mừng thành quả này, cảm ơn bạn đã chia sẻ.",
+    ],
+    "support": [
+        "Mong mọi việc sớm ổn hơn, cảm ơn bạn đã chia sẻ thông tin.",
+        "Chúc bạn và mọi người thật nhiều sức khỏe, hy vọng mọi chuyện sẽ tốt hơn.",
+        "Đọc nội dung thấy rất cần sự cảm thông, mong mọi việc sớm ổn định.",
+    ],
+    "learning": [
+        "Bài viết hữu ích, mình lưu lại để đọc kỹ hơn.",
+        "Cảm ơn bạn đã chia sẻ thông tin rõ ràng và thiết thực.",
+        "Nội dung này có nhiều ý đáng tham khảo, cảm ơn bạn.",
+    ],
+    "event": [
+        "Sự kiện này đáng chú ý, cảm ơn bạn đã cập nhật thông tin.",
+        "Thông tin rất kịp thời, mình sẽ theo dõi thêm.",
+        "Cập nhật hữu ích, cảm ơn bạn đã chia sẻ.",
+    ],
+    "default": [
+        "Bài viết hay và đáng quan tâm, cảm ơn bạn đã chia sẻ.",
+        "Nội dung khá hữu ích, mình sẽ theo dõi thêm.",
+        "Cảm ơn bạn đã chia sẻ, thông tin này rất đáng tham khảo.",
+    ],
+}
+
+
+def normalize_comment_text(text: str | None) -> str:
+    """Chuẩn hóa comment để giảm dấu hiệu spam/lặp ký tự quá mức."""
+    normalized = re.sub(r"\s+", " ", (text or "")).strip()
+    normalized = re.sub(r"([!?.,])\1{1,}", r"\1", normalized)
+    normalized = re.sub(r"([😀-🙏🚀-🛿])\1{1,}", r"\1", normalized)
+    return normalized[:220].strip()
+
+
+def is_facebook_standard_comment(text: str | None) -> bool:
+    """Kiểm tra nhanh comment có tự nhiên, ngắn gọn và ít dấu hiệu quảng cáo/spam."""
+    normalized = normalize_comment_text(text)
+    if len(normalized) < 12 or len(normalized) > 220:
+        return False
+    if normalized.isupper() and len(normalized) > 20:
+        return False
+    lower_text = normalized.lower()
+    return not any(re.search(pattern, lower_text, re.IGNORECASE) for pattern in FACEBOOK_COMMENT_BLOCKLIST_PATTERNS)
+
+
+def detect_facebook_post_category(post_text: str | None) -> str:
+    """Phân loại nhẹ nội dung bài viết để chọn comment phù hợp ngữ cảnh."""
+    text = (post_text or "").lower()
+    if not text:
+        return "default"
+    if "?" in text or any(word in text for word in ("hỏi", "xin ý kiến", "theo bạn", "mọi người nghĩ", "nên chọn")):
+        return "question"
+    if any(word in text for word in ("chúc mừng", "khai trương", "thành công", "đạt được", "vinh danh", "tốt nghiệp")):
+        return "congratulation"
+    if any(word in text for word in ("chia buồn", "tai nạn", "khó khăn", "bệnh", "mất", "qua đời", "cầu mong", "ủng hộ")):
+        return "support"
+    if any(word in text for word in ("hướng dẫn", "cách", "kinh nghiệm", "mẹo", "lưu ý", "kiến thức", "tutorial")):
+        return "learning"
+    if any(word in text for word in ("sự kiện", "thông báo", "cập nhật", "ra mắt", "livestream", "hôm nay", "ngày mai")):
+        return "event"
+    return "default"
+
+
+def build_contextual_facebook_comment(
+    post_text: str | None,
+    fallback_comment: str = "",
+    *,
+    chooser=random.choice,
+) -> str:
+    """Tạo comment ngắn, liên quan nội dung và tránh dấu hiệu spam thường gặp.
+
+    Hàm ưu tiên comment sinh theo ngữ cảnh bài viết. Nếu không đọc được bài,
+    comment fallback của người dùng chỉ được dùng khi vượt kiểm tra an toàn cơ bản.
+    """
+    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()
+    fallback = normalize_comment_text(fallback_comment)
+    if not normalized_post and is_facebook_standard_comment(fallback):
+        return fallback
+
+    category = detect_facebook_post_category(normalized_post)
+    templates = COMMENT_CATEGORY_TEMPLATES.get(category, COMMENT_CATEGORY_TEMPLATES["default"])
+    comment = normalize_comment_text(chooser(templates))
+    if is_facebook_standard_comment(comment):
+        return comment
+    if is_facebook_standard_comment(fallback):
+        return fallback
+    return COMMENT_CATEGORY_TEMPLATES["default"][0]
+
+
+AI_COMMENT_SYSTEM_PROMPT = """Bạn viết bình luận Facebook tự nhiên, lịch sự và liên quan trực tiếp đến bài viết.
+Yêu cầu: chỉ trả về đúng 1 bình luận tiếng Việt, 1 câu ngắn 40-160 ký tự; không quảng cáo,
+không kêu gọi inbox/mua hàng, không link, không hashtag, không tag, không số điện thoại,
+không spam emoji/dấu câu, không cam kết Facebook sẽ hiển thị bình luận."""
+
+
+def extract_ai_comment_text(response_payload: Dict[str, Any]) -> str:
+    """Lấy text bình luận từ payload Chat Completions/OpenAI-compatible."""
+    try:
+        content = response_payload["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return normalize_comment_text(str(content).strip().strip('"“”'))
+
+
+def generate_ai_facebook_comment(
+    post_text: str | None,
+    fallback_comment: str = "",
+    *,
+    api_key: str = "",
+    model: str = "gpt-4o-mini",
+    base_url: str = "https://api.openai.com/v1/chat/completions",
+    temperature: float = 0.9,
+    timeout: float = 25,
+    requester: Any = None,
+) -> str | None:
+    """Gọi AI để tạo comment ngẫu nhiên theo nội dung bài viết.
+
+    Trả về ``None`` khi thiếu cấu hình hoặc API lỗi để UI dùng fallback an toàn.
+    Comment AI vẫn được kiểm tra qua bộ lọc spam cơ bản trước khi sử dụng.
+    """
+    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:1800]
+    if not normalized_post or not api_key.strip() or not model.strip() or not base_url.strip():
+        return None
+
+    safe_fallback = normalize_comment_text(fallback_comment)
+    variant_id = random.randint(1000, 9999)
+    payload = {
+        "model": model.strip(),
+        "temperature": max(0.0, min(float(temperature), 1.5)),
+        "max_tokens": 90,
+        "messages": [
+            {"role": "system", "content": AI_COMMENT_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    "Hãy đọc nội dung bài viết dưới đây và tạo một bình luận mới, ngẫu nhiên, "
+                    "phù hợp ngữ cảnh nhất. Không sao chép nguyên văn bài viết. "
+                    f"Mã biến thể để tránh lặp: {variant_id}.\n\n"
+                    f"Nội dung bài viết:\n{normalized_post}\n\n"
+                    f"Mẫu dự phòng tham khảo nếu phù hợp: {safe_fallback}"
+                ),
+            },
+        ],
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        base_url.strip(),
+        data=data,
+        headers={
+            "Authorization": f"Bearer {api_key.strip()}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        response = requester(request, timeout=timeout) if requester else urllib.request.urlopen(request, timeout=timeout)
+        try:
+            raw_response = response.read().decode("utf-8")
+        finally:
+            close = getattr(response, "close", None)
+            if close:
+                close()
+        candidate = extract_ai_comment_text(json.loads(raw_response))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+
+    if is_facebook_standard_comment(candidate):
+        return candidate
+    return None
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.
