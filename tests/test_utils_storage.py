@@ -8,7 +8,7 @@ from facebook_caretool.care_planner import build_care_plan, format_care_plan, re
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
-from facebook_caretool.utils import build_comment_payloads, generate_totp_code, load_json, parse_delay, parse_proxy, save_json, spin_content
+from facebook_caretool.utils import build_comment_payloads, build_contextual_facebook_comment, detect_facebook_post_category, generate_ai_facebook_comment, generate_totp_code, is_facebook_standard_comment, load_json, parse_delay, parse_proxy, save_json, spin_content
 
 
 class UtilsTest(unittest.TestCase):
@@ -91,6 +91,86 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(
             build_comment_payloads("cmt 1\n\ncmt 2"),
             [{"text": "cmt 1", "media_path": ""}, {"text": "cmt 2", "media_path": ""}],
+        )
+
+
+    def test_detect_facebook_post_category_question(self):
+        self.assertEqual(detect_facebook_post_category("Mọi người nghĩ nên chọn cách nào?"), "question")
+
+    def test_build_contextual_facebook_comment_uses_post_context(self):
+        def first(options):
+            return options[0]
+
+        comment = build_contextual_facebook_comment(
+            "Hướng dẫn cách chăm sóc tài khoản an toàn hơn",
+            "Inbox mình để nhận ưu đãi https://example.com",
+            chooser=first,
+        )
+
+        self.assertEqual(comment, "Bài viết hữu ích, mình lưu lại để đọc kỹ hơn.")
+        self.assertTrue(is_facebook_standard_comment(comment))
+
+    def test_build_contextual_facebook_comment_uses_safe_fallback_without_scan_text(self):
+        self.assertEqual(
+            build_contextual_facebook_comment("", "Cảm ơn bạn đã chia sẻ thông tin hữu ích."),
+            "Cảm ơn bạn đã chia sẻ thông tin hữu ích.",
+        )
+
+    def test_is_facebook_standard_comment_rejects_spam_signals(self):
+        self.assertFalse(is_facebook_standard_comment("Inbox ngay https://example.com để chốt đơn!!!"))
+
+
+    def test_generate_ai_facebook_comment_requires_configuration(self):
+        self.assertIsNone(generate_ai_facebook_comment("Bài viết hữu ích", api_key=""))
+
+    def test_generate_ai_facebook_comment_uses_openai_compatible_response(self):
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+                self.closed = False
+
+            def read(self):
+                return self.payload.encode("utf-8")
+
+            def close(self):
+                self.closed = True
+
+        captured = {}
+
+        def requester(request, timeout):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            captured["body"] = request.data.decode("utf-8")
+            captured["auth"] = request.headers.get("Authorization")
+            return FakeResponse('{"choices":[{"message":{"content":"Cảm ơn bạn đã chia sẻ góc nhìn rất hữu ích."}}]}')
+
+        comment = generate_ai_facebook_comment(
+            "Bài viết chia sẻ kinh nghiệm chăm sóc tài khoản.",
+            api_key="test-key",
+            model="test-model",
+            base_url="https://example.com/v1/chat/completions",
+            requester=requester,
+        )
+
+        self.assertEqual(comment, "Cảm ơn bạn đã chia sẻ góc nhìn rất hữu ích.")
+        self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
+        self.assertEqual(captured["auth"], "Bearer test-key")
+        self.assertIn('"model": "test-model"', captured["body"])
+
+    def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
+        class FakeResponse:
+            def read(self):
+                return b'{"choices":[{"message":{"content":"Inbox ngay https://example.com de chot don"}}]}'
+
+            def close(self):
+                pass
+
+        self.assertIsNone(
+            generate_ai_facebook_comment(
+                "Bài viết bất kỳ",
+                api_key="test-key",
+                requester=lambda request, timeout: FakeResponse(),
+            )
         )
 
     def test_generate_totp_code_uses_rfc6238_vector(self):
