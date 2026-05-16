@@ -8,7 +8,7 @@ from facebook_caretool.care_planner import build_care_plan, format_care_plan, re
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
-from facebook_caretool.utils import build_comment_payloads, build_contextual_facebook_comment, detect_facebook_post_category, generate_ai_facebook_comment, generate_totp_code, is_facebook_standard_comment, load_json, parse_delay, parse_proxy, save_json, spin_content
+from facebook_caretool.utils import build_comment_payloads, build_contextual_facebook_comment, detect_facebook_post_category, generate_ai_facebook_comment, generate_totp_code, is_facebook_standard_comment, load_json, parse_delay, parse_proxy, save_json, select_relevant_scanned_post_text, spin_content
 
 
 class UtilsTest(unittest.TestCase):
@@ -122,6 +122,17 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(comment, "Mình thấy nội dung này khá hữu ích và thực tế.")
         self.assertNotIn("Số thông báo", comment)
         self.assertNotIn("Facebook Pham Gia", comment)
+
+    def test_select_relevant_scanned_post_text_prefers_post_over_comment_ui(self):
+        selected = select_relevant_scanned_post_text([
+            "Số thông báo chưa đọc Menu Facebook Trang chủ Watch Reels",
+            "Nguyễn Văn A 2 giờ Hướng dẫn chăm sóc tài khoản an toàn hơn khi đăng nhập nhiều thiết bị. Thích Bình luận Chia sẻ Phù hợp nhất Bạn B comment không liên quan",
+            "Phù hợp nhất Bạn B comment về chuyện mua bán không liên quan Phản hồi",
+        ])
+
+        self.assertIn("Hướng dẫn chăm sóc tài khoản an toàn", selected)
+        self.assertNotIn("Phù hợp nhất", selected)
+        self.assertNotIn("comment không liên quan", selected)
 
     def test_is_facebook_standard_comment_rejects_spam_signals(self):
         self.assertFalse(is_facebook_standard_comment("Inbox ngay https://example.com để chốt đơn!!!"))

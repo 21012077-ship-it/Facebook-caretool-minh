@@ -281,6 +281,95 @@ def clean_scanned_post_text(post_text: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip(" -–—|•\n\t")
 
 
+FACEBOOK_POST_SCAN_BOUNDARY_PATTERNS = [
+    r"\b(?:thích|like)\s+(?:bình luận|comment)\s+(?:chia sẻ|share)\b",
+    r"\b(?:viết bình luận|write a comment|most relevant|phù hợp nhất|all comments|tất cả bình luận)\b",
+    r"\b(?:xem thêm bình luận|view more comments|xem các bình luận|view previous comments)\b",
+]
+
+FACEBOOK_POST_SCAN_NEGATIVE_PATTERNS = [
+    r"\b(?:số thông báo chưa đọc|menu|messenger|watch|reels|trang chủ|home)\b",
+    r"\b(?:viết bình luận|write a comment|phù hợp nhất|most relevant|all comments|tất cả bình luận)\b",
+    r"\b(?:phản hồi|reply)\b",
+    r"\b(?:đã thích|liked by|notifications?|thông báo)\b",
+]
+
+
+def trim_scanned_post_candidate(text: str | None) -> str:
+    """Cắt phần text quét được ở ranh giới khu comment/UI để giữ nội dung bài viết."""
+    candidate = re.sub(r"\s+", " ", text or "").strip()
+    if not candidate:
+        return ""
+
+    boundary_indexes = []
+    for pattern in FACEBOOK_POST_SCAN_BOUNDARY_PATTERNS:
+        match = re.search(pattern, candidate, flags=re.IGNORECASE)
+        if match:
+            boundary_indexes.append(match.start())
+    if boundary_indexes:
+        candidate = candidate[: min(boundary_indexes)].strip()
+
+    return candidate.strip(" -–—|•\n\t")
+
+
+def score_scanned_post_candidate(text: str | None) -> int:
+    """Chấm điểm ứng viên nội dung bài để tránh lấy nhầm menu/comment của Facebook."""
+    candidate = trim_scanned_post_candidate(text)
+    if not candidate:
+        return -1000
+
+    cleaned = clean_scanned_post_text(candidate)
+    words = re.findall(r"[A-Za-zÀ-ỹ0-9]+", cleaned)
+    if len(words) < 4:
+        return -500
+
+    lower_candidate = candidate.lower()
+    score = min(len(cleaned), 600)
+    score += min(len(words), 80) * 4
+
+    if re.search(r"[.!?…]", cleaned):
+        score += 35
+    if any(keyword in lower_candidate for keyword in ("hướng dẫn", "chia sẻ", "câu chuyện", "kinh nghiệm", "thông báo", "sự kiện", "mẹo")):
+        score += 30
+
+    for pattern in FACEBOOK_POST_SCAN_NEGATIVE_PATTERNS:
+        score -= 160 * len(re.findall(pattern, lower_candidate, flags=re.IGNORECASE))
+
+    # Ứng viên quá dài thường là cả article/body gồm cả comment và thanh điều hướng.
+    if len(candidate) > 1800:
+        score -= 220
+    elif len(candidate) > 1000:
+        score -= 90
+
+    return score
+
+
+def select_relevant_scanned_post_text(candidates: list[str] | tuple[str, ...] | None) -> str:
+    """Chọn đoạn giống nội dung bài viết nhất từ các đoạn DOM quét được.
+
+    Facebook thường trả về cả thanh nút, bộ lọc bình luận hoặc comment bên dưới bài.
+    Hàm này ưu tiên đoạn nội dung chính và cắt bỏ phần sau cụm nút Thích/Bình luận/Chia sẻ.
+    """
+    best_text = ""
+    best_score = -1000
+    seen: set[str] = set()
+
+    for raw_candidate in candidates or []:
+        candidate = trim_scanned_post_candidate(raw_candidate)
+        if not candidate:
+            continue
+        compact_key = re.sub(r"\W+", "", candidate.lower())[:180]
+        if compact_key in seen:
+            continue
+        seen.add(compact_key)
+
+        score = score_scanned_post_candidate(candidate)
+        if score > best_score:
+            best_score = score
+            best_text = candidate
+
+    return best_text[:1800].strip() if best_score > 0 else ""
+
 def extract_post_focus(post_text: str | None, max_words: int = 10) -> str:
     """Rút một cụm ý nổi bật từ bài viết để comment không còn là câu mẫu cố định."""
     cleaned = clean_scanned_post_text(post_text)

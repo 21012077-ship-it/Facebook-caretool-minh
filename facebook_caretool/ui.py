@@ -10,7 +10,7 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import build_comment_payloads, build_contextual_facebook_comment, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, spin_content
+from .utils import build_comment_payloads, build_contextual_facebook_comment, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, select_relevant_scanned_post_text, spin_content
 import json
 import os
 import threading
@@ -859,7 +859,7 @@ class FacebookCareTool(ctk.CTk):
         return not self.is_task_stopped()
 
     def scan_facebook_content_before_comment(self, page, acc_name):
-        """Lướt và đọc nhanh nội dung bài/comment hiện có trước khi tạo comment."""
+        """Đọc nội dung chính của bài viết trước khi tạo comment."""
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Đang quét nội dung Facebook để tạo comment phù hợp..."))
 
         see_more_selectors = [
@@ -880,41 +880,64 @@ class FacebookCareTool(ctk.CTk):
             except Exception:
                 continue
 
-        for scroll_round in range(3):
-            if not self.wait_if_paused():
-                return None
-            try:
-                page.mouse.wheel(0, 300 if scroll_round < 2 else -200)
-            except Exception:
-                pass
-            if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
-                return None
-
         try:
-            scanned_text = page.evaluate(
+            scanned_candidates = page.evaluate(
                 r"""
                 () => {
                     const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-                    const roots = [
-                        document.querySelector('div[role="article"]'),
-                        document.querySelector('div[role="main"]'),
-                        document.body,
-                    ].filter(Boolean);
-                    const candidates = roots
-                        .map((root) => normalize(root.innerText || root.textContent || ''))
-                        .filter(Boolean);
-                    candidates.sort((a, b) => b.length - a.length);
-                    return (candidates[0] || '').slice(0, 500);
+                    const isVisible = (element) => {
+                        if (!element) return false;
+                        const rect = element.getBoundingClientRect();
+                        const style = window.getComputedStyle(element);
+                        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+                    };
+                    const pushText = (items, value) => {
+                        const text = normalize(value);
+                        if (text && text.length >= 18 && !items.includes(text)) items.push(text);
+                    };
+                    const collectCandidates = () => {
+                        const items = [];
+                        const article = document.querySelector('div[role="article"]');
+                        const roots = [article, document.querySelector('div[role="main"]')].filter(Boolean);
+                        const messageSelectors = [
+                            '[data-ad-preview="message"]',
+                            '[data-ad-comet-preview="message"]',
+                            '[data-ad-rendering-role="story_message"]',
+                            '[data-testid="post_message"]',
+                            '[dir="auto"]',
+                        ];
+
+                        for (const root of roots) {
+                            for (const selector of messageSelectors) {
+                                for (const node of Array.from(root.querySelectorAll(selector)).slice(0, 30)) {
+                                    if (!isVisible(node)) continue;
+                                    if (node.closest('[role="button"], [role="textbox"], form, [aria-label*="comment" i], [aria-label*="bình luận" i]')) continue;
+                                    pushText(items, node.innerText || node.textContent || '');
+                                }
+                            }
+                        }
+
+                        if (article) pushText(items, article.innerText || article.textContent || '');
+                        return items;
+                    };
+
+                    let candidates = collectCandidates();
+                    if (candidates.length) return candidates.slice(0, 40);
+
+                    window.scrollBy(0, -350);
+                    candidates = collectCandidates();
+                    return candidates.slice(0, 40);
                 }
                 """
             )
+            scanned_text = select_relevant_scanned_post_text(scanned_candidates)
         except Exception as exc:
             self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không đọc được nội dung bài, sẽ dùng mẫu dự phòng: {err[:60]}..."))
             return ""
 
         if scanned_text:
             preview = scanned_text[:120] + ("..." if len(scanned_text) > 120 else "")
-            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] ✅ Đã quét nội dung: {text}"))
+            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] ✅ Đã quét đúng nội dung bài: {text}"))
             return scanned_text
 
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không thấy text rõ ràng sau khi quét, sẽ dùng mẫu dự phòng."))
