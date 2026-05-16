@@ -1183,6 +1183,55 @@ class FacebookCareTool(ctk.CTk):
 
         raise RuntimeError("Không tìm thấy ô nhập comment của bài viết")
 
+    def attach_media_to_comment(self, page, selected_image_path):
+        """Đính kèm ảnh/video vào ô comment hiện tại với nhiều selector Facebook khác nhau."""
+        attach_button_selectors = [
+            "div[role='button'][aria-label*='Ảnh/video' i]",
+            "div[role='button'][aria-label*='Photo/video' i]",
+            "div[role='button'][aria-label*='Thêm ảnh' i]",
+            "div[role='button'][aria-label*='Add photo' i]",
+            "div[role='button'][aria-label*='Đính kèm' i]",
+            "div[role='button'][aria-label*='Attach' i]",
+            "div[role='button'][aria-label*='Camera' i]",
+            "div[aria-label*='Ảnh/video' i]",
+            "div[aria-label*='Photo/video' i]",
+            "div[aria-label*='Đính kèm' i]",
+            "div[aria-label*='Attach' i]",
+        ]
+
+        for selector in attach_button_selectors:
+            try:
+                buttons = page.locator(selector)
+                button_count = min(buttons.count(), 8)
+                for index in range(button_count):
+                    button = buttons.nth(index)
+                    if not button.is_visible():
+                        continue
+                    button.scroll_into_view_if_needed()
+                    with page.expect_file_chooser(timeout=5000) as fc_info:
+                        button.click()
+                    fc_info.value.set_files(selected_image_path)
+                    return True
+            except Exception:
+                continue
+
+        file_input_selectors = [
+            "input[type='file'][accept*='image' i]",
+            "input[type='file'][accept*='video' i]",
+            "input[type='file']",
+        ]
+        for selector in file_input_selectors:
+            try:
+                file_inputs = page.locator(selector)
+                input_count = min(file_inputs.count(), 8)
+                for index in range(input_count):
+                    file_inputs.nth(index).set_input_files(selected_image_path, timeout=5000)
+                    return True
+            except Exception:
+                continue
+
+        return False
+
     def type_and_submit_comment(self, page, comment_box, final_content, selected_image_path, acc_name, action_name):
         comment_box.scroll_into_view_if_needed()
         comment_box.wait_for(state="visible", timeout=10000)
@@ -1206,12 +1255,8 @@ class FacebookCareTool(ctk.CTk):
             image_name = os.path.basename(selected_image_path)
             self.after(0, lambda n=acc_name, img=image_name, action=action_name: self.append_live_log(f"[{n}] Đang đính kèm ảnh/video cùng {action}: {img}"))
             try:
-                with page.expect_file_chooser(timeout=8000) as fc_info:
-                    attach_btn = page.locator("div[aria-label*='Đính kèm'], div[aria-label*='Attach']").first
-                    attach_btn.click()
-
-                file_chooser = fc_info.value
-                file_chooser.set_files(selected_image_path)
+                if not self.attach_media_to_comment(page, selected_image_path):
+                    raise RuntimeError("Không tìm thấy nút hoặc input tải ảnh/video trong khung comment")
                 if not self.interruptible_sleep(random.uniform(4, 7)):
                     return False
 
@@ -1219,8 +1264,8 @@ class FacebookCareTool(ctk.CTk):
                 comment_box.click()
                 if not self.interruptible_sleep(1.5):
                     return False
-            except Exception:
-                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Không gửi comment vì ảnh/video đi kèm chưa đính kèm được."))
+            except Exception as exc:
+                self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ Không gửi comment vì ảnh/video đi kèm chưa đính kèm được: {err[:80]}"))
                 raise
 
         page.keyboard.press("Enter")

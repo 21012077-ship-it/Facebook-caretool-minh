@@ -177,6 +177,8 @@ FACEBOOK_UI_NOISE_PATTERNS = [
     r"\b(?:thích|like|bình luận|comment|chia sẻ|share|phản hồi|reply)\b",
     r"\b(?:xem thêm|see more|ẩn bớt|view more|follow|theo dõi)\b",
     r"\b(?:giờ|phút|ngày|tuần)\s*(?:trước)?\b",
+    r"\bsố\s+thông\s+báo\s+chưa\s+đọc\b",
+    r"\b(?:menu|facebook|messenger|watch|reels|trang chủ|home)\b",
 ]
 
 VIETNAMESE_TOPIC_STOPWORDS = {
@@ -224,6 +226,7 @@ VIETNAMESE_TOPIC_STOPWORDS = {
     "thêm",
     "theo",
     "thấy",
+    "trên",
     "trong",
     "và",
     "về",
@@ -309,8 +312,9 @@ def extract_post_focus(post_text: str | None, max_words: int = 10) -> str:
     if len(topic_words) >= 3:
         return " ".join(topic_words).strip()
 
-    compact_sentence = " ".join(words[:max_words]).strip()
-    return compact_sentence
+    # Nếu sau khi lọc chỉ còn 1-2 từ (thường là tên tài khoản/page hoặc chữ giao diện),
+    # không dùng làm trọng tâm để tránh sinh comment bám vào UI như "Số thông báo chưa đọc Menu Facebook...".
+    return ""
 
 
 def build_contextual_facebook_comment(
