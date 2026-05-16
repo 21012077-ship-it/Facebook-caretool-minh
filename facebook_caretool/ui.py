@@ -485,6 +485,7 @@ class FacebookCareTool(ctk.CTk):
 
         self.delay_cmt_input = create_setting_row(right_panel, "Nghỉ giữa mỗi comment (giây):", "60-120")
         self.limit_cmt_input = create_setting_row(right_panel, "Giới hạn comment / tài khoản:", "5")
+        self.comment_parallel_input = create_setting_row(right_panel, "Số tab chạy song song:", "1")
 
         self.like_before_cmt_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(right_panel, text="Tự động thả Like trước khi Comment", variable=self.like_before_cmt_var).pack(anchor="w", padx=20, pady=(10, 4))
@@ -732,15 +733,27 @@ class FacebookCareTool(ctk.CTk):
             messagebox.showwarning("Thông báo", "Giới hạn comment / tài khoản phải là số nguyên lớn hơn 0!")
             return
 
+        try:
+            max_parallel_tabs = int(self.comment_parallel_input.get().strip())
+            if max_parallel_tabs <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showwarning("Thông báo", "Số tab chạy song song phải là số nguyên lớn hơn 0!")
+            return
+
         self.reset_task_state()
         comment_image_paths = [
             path for path in getattr(self, "comment_image_paths", [])
             if path and os.path.exists(path)
         ]
 
+        selected_indexes = list(self.comment_selected_accounts)
+        max_parallel_tabs = min(max_parallel_tabs, len(selected_indexes))
+        like_before_comment = self.like_before_cmt_var.get()
+
         threading.Thread(
             target=self.run_comment_task,
-            args=(list(self.comment_selected_accounts), urls, raw_content, comment_limit, comment_image_paths),
+            args=(selected_indexes, urls, raw_content, comment_limit, comment_image_paths, max_parallel_tabs, like_before_comment),
             daemon=True
         ).start()
 
@@ -1085,7 +1098,7 @@ class FacebookCareTool(ctk.CTk):
         page.keyboard.press("Enter")
         return True
 
-    def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None):
+    def run_comment_task(self, account_indexes, urls, raw_content, comment_limit, comment_image_paths=None, max_parallel_tabs=1, like_before_comment=True):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
         comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
@@ -1102,6 +1115,14 @@ class FacebookCareTool(ctk.CTk):
                 ),
             )
 
+        max_parallel_tabs = max(1, min(max_parallel_tabs, len(account_indexes)))
+        self.after(
+            0,
+            lambda tabs=max_parallel_tabs: self.append_live_log(
+                f"🧵 Chiến dịch comment chạy song song tối đa {tabs} tab/account."
+            ),
+        )
+
         acc_tasks: dict[int, list[str]] = {acc_idx: [] for acc_idx in account_indexes}
         skipped_urls = 0
         for url in urls:
@@ -1115,17 +1136,21 @@ class FacebookCareTool(ctk.CTk):
         if skipped_urls:
             self.after(0, lambda count=skipped_urls, limit=comment_limit: self.append_live_log(f"⚠️ Bỏ qua {count} link vì đã đạt giới hạn {limit} comment/tài khoản."))
 
-        for acc_idx, acc_urls in acc_tasks.items():
+        runnable_tasks = [
+            (acc_idx, acc_urls)
+            for acc_idx, acc_urls in acc_tasks.items()
+            if acc_urls and acc_idx < len(self.accounts)
+        ]
+
+        def run_account_comment_task(acc_idx, acc_urls):
             if self.is_task_stopped():
-                break
-            if not acc_urls:
-                continue
-            if acc_idx >= len(self.accounts): continue
+                return
 
             account = self.accounts[acc_idx]
             acc_name = account.get("name", "Unknown")
             self.after(0, lambda n=acc_name, count=len(acc_urls): self.append_live_log(f"🚀 [{n}] Được phân công chạy {count} link."))
 
+            browser = None
             try:
                 cookies = self.load_cookies(account)
                 with sync_playwright() as p:
@@ -1150,14 +1175,15 @@ class FacebookCareTool(ctk.CTk):
                         if not self.interruptible_sleep(2):
                             break
 
-                        if self.like_before_cmt_var.get():
+                        if like_before_comment:
                             try:
                                 like_btn = page.locator("div[aria-label='Thích'], div[aria-label='Like']").first
                                 if like_btn.is_visible():
                                     like_btn.click()
                                     if not self.interruptible_sleep(random.uniform(1.5, 3)):
                                         break
-                            except: pass
+                            except Exception:
+                                pass
 
                         comment_success = False
                         try:
@@ -1200,10 +1226,27 @@ class FacebookCareTool(ctk.CTk):
                             self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Đang nghỉ {int(d)} giây trước link tiếp theo..."))
                             if not self.interruptible_sleep(delay_sec):
                                 break
-
-                    browser.close()
             except Exception as e:
                 self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi profile: {err}"))
+            finally:
+                if browser:
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+
+        with ThreadPoolExecutor(max_workers=max_parallel_tabs) as executor:
+            futures = [
+                executor.submit(run_account_comment_task, acc_idx, acc_urls)
+                for acc_idx, acc_urls in runnable_tasks
+            ]
+            for future in as_completed(futures):
+                if self.is_task_stopped():
+                    break
+                try:
+                    future.result()
+                except Exception as exc:
+                    self.after(0, lambda err=str(exc): self.append_live_log(f"❌ Lỗi tab comment: {err}"))
 
         if self.is_task_stopped():
             self.after(0, lambda: self.append_live_log("=== ⏹ ĐÃ DỪNG CHIẾN DỊCH COMMENT ==="))
