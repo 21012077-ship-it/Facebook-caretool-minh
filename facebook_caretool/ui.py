@@ -780,13 +780,19 @@ class FacebookCareTool(ctk.CTk):
         return not self.is_task_stopped()
 
     def click_existing_comment_reply_button(self, page, acc_name):
+        """Chọn vị trí comment theo ưu tiên nghiệp vụ.
+
+        Ưu tiên trả lời comment đã có phản hồi. Nếu không thấy comment như vậy,
+        chỉ trả lời comment gần nhất khi bài có hơn 10 comment; bài ít
+        comment hơn sẽ comment trực tiếp vào bài viết.
+        """
         reply_selectors = [
             "div[role='button'][aria-label='Phản hồi'], div[aria-label='Phản hồi']",
             "div[role='button'][aria-label='Reply'], div[aria-label='Reply']",
             "text=Phản hồi",
             "text=Reply",
         ]
-        top_comment_fallbacks: list[Any] = []
+        nearby_reply_buttons: list[Any] = []
 
         for scroll_round in range(6):
             if not self.wait_if_paused():
@@ -801,10 +807,7 @@ class FacebookCareTool(ctk.CTk):
                         if not button.is_visible():
                             continue
 
-                        # Lưu vài nút Phản hồi đầu tiên làm phương án dự phòng.
-                        # Ưu tiên chính vẫn là comment đã có phản hồi/bình luận sẵn.
-                        if scroll_round == 0 and len(top_comment_fallbacks) < 5:
-                            top_comment_fallbacks.append(button)
+                        nearby_reply_buttons = self.remember_nearby_reply_button(nearby_reply_buttons, button)
 
                         if not self.is_comment_with_existing_replies(button):
                             continue
@@ -821,16 +824,109 @@ class FacebookCareTool(ctk.CTk):
                 if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
                     return False
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] Không thấy comment đã có phản hồi sẵn, chuyển sang một comment ở đầu."))
-        for button in top_comment_fallbacks:
+        comment_count = self.detect_post_comment_count(page)
+        if comment_count is not None and comment_count <= 10:
+            self.after(0, lambda n=acc_name, count=comment_count: self.append_live_log(
+                f"[{n}] Không thấy comment có phản hồi và bài có {count} comment, chuyển sang comment thẳng vào bài."
+            ))
+            return False
+
+        if comment_count is None and len(nearby_reply_buttons) <= 10:
+            self.after(0, lambda n=acc_name, count=len(nearby_reply_buttons): self.append_live_log(
+                f"[{n}] Không đọc được tổng comment; mới thấy {count} comment, chuyển sang comment thẳng vào bài."
+            ))
+            return False
+
+        if comment_count is None:
+            self.after(0, lambda n=acc_name: self.append_live_log(
+                f"[{n}] Không thấy comment có phản hồi; không đọc được tổng comment nhưng đã thấy hơn 10 comment, trả lời comment gần nhất."
+            ))
+        else:
+            self.after(0, lambda n=acc_name, count=comment_count: self.append_live_log(
+                f"[{n}] Không thấy comment có phản hồi; bài có {count} comment, trả lời comment gần nhất."
+            ))
+
+        for button in reversed(nearby_reply_buttons):
             try:
-                if self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào một comment ở đầu."):
+                if self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào comment gần nhất."):
                     return True
                 return False
             except Exception:
                 continue
 
         return False
+
+    def remember_nearby_reply_button(self, reply_buttons: list[Any], button: Any) -> list[Any]:
+        try:
+            button_key = button.evaluate(
+                r"""
+                (button) => {
+                    const rect = button.getBoundingClientRect();
+                    const parentText = (button.parentElement?.parentElement?.innerText || '').slice(0, 120);
+                    return `${Math.round(rect.top)}:${Math.round(rect.left)}:${parentText}`;
+                }
+                """
+            )
+        except Exception:
+            button_key = str(id(button))
+
+        for existing in reply_buttons:
+            try:
+                existing_key = existing.evaluate(
+                    r"""
+                    (button) => {
+                        const rect = button.getBoundingClientRect();
+                        const parentText = (button.parentElement?.parentElement?.innerText || '').slice(0, 120);
+                        return `${Math.round(rect.top)}:${Math.round(rect.left)}:${parentText}`;
+                    }
+                    """
+                )
+            except Exception:
+                existing_key = str(id(existing))
+            if existing_key == button_key:
+                return reply_buttons
+
+        reply_buttons.append(button)
+        return reply_buttons[-20:]
+
+    def detect_post_comment_count(self, page):
+        try:
+            return page.evaluate(
+                r"""
+                () => {
+                    const parseCompactNumber = (rawNumber) => {
+                        const compact = String(rawNumber || '').trim().toLowerCase();
+                        const multiplier = compact.includes('k') || compact.includes('n') ? 1000 : compact.includes('m') || compact.includes('tr') ? 1000000 : 1;
+                        const numeric = compact.replace(/[,\.](?=\d{3}(\D|$))/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+                        const value = Number.parseFloat(numeric);
+                        if (Number.isNaN(value)) return null;
+                        return Math.round(value * multiplier);
+                    };
+                    const patterns = [
+                        /(\d+(?:[.,]\d+)?\s*(?:k|m|n|tr)?)[\s\u00a0]*(?:bình luận|comments?)/i,
+                        /(?:bình luận|comments?)[\s\u00a0]*(\d+(?:[.,]\d+)?\s*(?:k|m|n|tr)?)/i,
+                    ];
+                    const roots = [
+                        document.querySelector('div[role="article"]'),
+                        document.querySelector('div[role="main"]'),
+                        document.body,
+                    ].filter(Boolean);
+
+                    for (const root of roots) {
+                        const text = (root.innerText || root.textContent || '').replace(/\s+/g, ' ');
+                        for (const pattern of patterns) {
+                            const match = text.match(pattern);
+                            if (!match) continue;
+                            const value = parseCompactNumber(match[1]);
+                            if (value !== null) return value;
+                        }
+                    }
+                    return null;
+                }
+                """
+            )
+        except Exception:
+            return None
 
     def is_comment_with_existing_replies(self, reply_button):
         try:
