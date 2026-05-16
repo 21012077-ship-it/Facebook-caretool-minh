@@ -19,8 +19,8 @@ import random
 from datetime import datetime
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
-DEFAULT_COMMENT_CONTENT = "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content."
-AI_COMMENT_EMPTY_FALLBACK = "Cảm ơn bạn đã chia sẻ thông tin hữu ích."
+DEFAULT_COMMENT_CONTENT = ""
+AI_COMMENT_EMPTY_FALLBACK = "Mình thấy nội dung này có vài điểm đáng suy nghĩ và khá dễ liên hệ với thực tế."
 ACCOUNT_RENDER_BATCH_SIZE = 60
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
@@ -458,8 +458,8 @@ class FacebookCareTool(ctk.CTk):
             content_frame,
             text=(
 
-                "Bật chế độ tự tạo comment để tool quét nội dung và sinh câu phù hợp theo bài viết. "
-                "Ô này chỉ là mẫu dự phòng; có thể để trống khi chế độ tự tạo đang bật."
+                "Nên để trống ô này và bật tự tạo comment: tool sẽ quét bài viết rồi tự nghĩ câu mới bám đúng nội dung bài. "
+                "Chỉ nhập fallback nếu muốn có câu dự phòng khi không đọc được nội dung."
 
             ),
             text_color="#a7f3d0",
@@ -511,14 +511,14 @@ class FacebookCareTool(ctk.CTk):
         self.scan_before_cmt_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             right_panel,
-            text="Tự tạo comment bằng AI theo nội dung bài",
+            text="Quét bài rồi tự nghĩ comment phù hợp",
             variable=self.scan_before_cmt_var,
         ).pack(anchor="w", padx=20, pady=(4, 4))
 
         ctk.CTkLabel(
             right_panel,
 
-            text="Khi bật: tool đọc nội dung bài/comment rồi ưu tiên gọi AI tạo câu trả lời ngẫu nhiên theo ngữ cảnh. Nếu AI lỗi sẽ dùng mẫu dự phòng an toàn; không đảm bảo Facebook luôn hiển thị comment.",
+            text="Khi bật: tool đọc nội dung bài/comment rồi ưu tiên gọi AI để tự nghĩ comment mới, bám ý cụ thể trong bài. Nếu AI lỗi sẽ tự rút ý chính từ bài để viết câu dự phòng; không đảm bảo Facebook luôn hiển thị comment.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -661,13 +661,13 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="AI tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Nhập API key/model OpenAI-compatible để tool tạo comment ngẫu nhiên theo nội dung bài. Nếu thiếu key hoặc API lỗi, tool sẽ dùng fallback an toàn.",
+            text="Nhập API key/model OpenAI-compatible để tool quét bài rồi tự nghĩ comment mới, tự nhiên và bám nội dung cụ thể. Nếu thiếu key hoặc API lỗi, tool sẽ tự rút ý chính từ bài để viết câu dự phòng.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
         ).pack(fill="x", padx=18, pady=(0, 10))
         self.ai_comment_enabled_var = ctk.BooleanVar(value=bool(self.app_settings.get("ai_comment_enabled", True)))
-        ctk.CTkCheckBox(ai_frame, text="Bật AI tạo comment theo ngữ cảnh", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
+        ctk.CTkCheckBox(ai_frame, text="Bật AI tự nghĩ comment theo bài viết", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
         ctk.CTkLabel(ai_frame, text="API Key", anchor="w").pack(fill="x", padx=18, pady=(8, 0))
         self.ai_comment_api_key_entry = ctk.CTkEntry(ai_frame, show="*")
         self.ai_comment_api_key_entry.pack(fill="x", padx=18, pady=(4, 8))
@@ -1244,10 +1244,10 @@ class FacebookCareTool(ctk.CTk):
                 base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
             )
             if ai_comment:
-                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🤖 AI đã tạo comment ngẫu nhiên theo bài viết."))
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🤖 AI đã đọc bài và tự nghĩ comment phù hợp."))
                 return ai_comment
 
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, dùng fallback an toàn."))
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, tự rút ý trong bài để viết câu dự phòng."))
 
         return build_contextual_facebook_comment(scanned_post_text, fallback_content)
 
@@ -1273,9 +1273,9 @@ class FacebookCareTool(ctk.CTk):
             comment_payloads = build_comment_payloads(AI_COMMENT_EMPTY_FALLBACK, comment_image_paths)
 
             if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
-                log_message = "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi AI tạo comment tự động."
+                log_message = "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi AI tự nghĩ comment phù hợp."
             else:
-                log_message = "🧠 Đang chạy chế độ tự tạo comment: mỗi bài sẽ được quét nội dung rồi chọn câu phù hợp."
+                log_message = "🧠 Đang chạy chế độ tự tạo comment: mỗi bài sẽ được quét nội dung rồi tự rút ý chính để viết comment."
 
             self.after(0, lambda msg=log_message: self.append_live_log(msg))
 

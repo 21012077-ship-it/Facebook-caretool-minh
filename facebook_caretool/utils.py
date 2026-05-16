@@ -173,37 +173,62 @@ FACEBOOK_COMMENT_BLOCKLIST_PATTERNS = [
     r"[#@]{2,}",
 ]
 
-COMMENT_CATEGORY_TEMPLATES: Dict[str, List[str]] = {
-    "question": [
-        "Câu hỏi này hay, mình cũng muốn xem thêm chia sẻ từ mọi người.",
-        "Nội dung này đáng để thảo luận thêm, cảm ơn bạn đã nêu vấn đề.",
-        "Mình thấy chủ đề này khá hữu ích, theo dõi thêm ý kiến của mọi người.",
-    ],
-    "congratulation": [
-        "Chúc mừng bạn, thông tin rất tích cực và đáng vui.",
-        "Tin vui quá, chúc mọi việc tiếp tục thuận lợi nhé.",
-        "Chúc mừng thành quả này, cảm ơn bạn đã chia sẻ.",
-    ],
-    "support": [
-        "Mong mọi việc sớm ổn hơn, cảm ơn bạn đã chia sẻ thông tin.",
-        "Chúc bạn và mọi người thật nhiều sức khỏe, hy vọng mọi chuyện sẽ tốt hơn.",
-        "Đọc nội dung thấy rất cần sự cảm thông, mong mọi việc sớm ổn định.",
-    ],
-    "learning": [
-        "Bài viết hữu ích, mình lưu lại để đọc kỹ hơn.",
-        "Cảm ơn bạn đã chia sẻ thông tin rõ ràng và thiết thực.",
-        "Nội dung này có nhiều ý đáng tham khảo, cảm ơn bạn.",
-    ],
-    "event": [
-        "Sự kiện này đáng chú ý, cảm ơn bạn đã cập nhật thông tin.",
-        "Thông tin rất kịp thời, mình sẽ theo dõi thêm.",
-        "Cập nhật hữu ích, cảm ơn bạn đã chia sẻ.",
-    ],
-    "default": [
-        "Bài viết hay và đáng quan tâm, cảm ơn bạn đã chia sẻ.",
-        "Nội dung khá hữu ích, mình sẽ theo dõi thêm.",
-        "Cảm ơn bạn đã chia sẻ, thông tin này rất đáng tham khảo.",
-    ],
+FACEBOOK_UI_NOISE_PATTERNS = [
+    r"\b(?:thích|like|bình luận|comment|chia sẻ|share|phản hồi|reply)\b",
+    r"\b(?:xem thêm|see more|ẩn bớt|view more|follow|theo dõi)\b",
+    r"\b(?:giờ|phút|ngày|tuần)\s*(?:trước)?\b",
+]
+
+VIETNAMESE_TOPIC_STOPWORDS = {
+    "anh",
+    "bài",
+    "bạn",
+    "bằng",
+    "các",
+    "cách",
+    "cho",
+    "còn",
+    "có",
+    "cũng",
+    "của",
+    "đang",
+    "để",
+    "đến",
+    "đi",
+    "đó",
+    "được",
+    "em",
+    "hơn",
+    "khi",
+    "là",
+    "lại",
+    "làm",
+    "mà",
+    "mình",
+    "mọi",
+    "một",
+    "nào",
+    "này",
+    "nên",
+    "nghĩ",
+    "người",
+    "nhé",
+    "những",
+    "nói",
+    "nữa",
+    "qua",
+    "rất",
+    "rồi",
+    "sẽ",
+    "thì",
+    "thêm",
+    "theo",
+    "thấy",
+    "trong",
+    "và",
+    "về",
+    "vì",
+    "với",
 }
 
 
@@ -244,34 +269,92 @@ def detect_facebook_post_category(post_text: str | None) -> str:
     return "default"
 
 
+def clean_scanned_post_text(post_text: str | None) -> str:
+    """Lọc bớt chữ giao diện Facebook để phần tạo comment bám vào nội dung bài."""
+    text = re.sub(r"https?://\S+|www\.\S+", " ", post_text or "")
+    text = re.sub(r"[#@][\wÀ-ỹ_]+", " ", text)
+    for pattern in FACEBOOK_UI_NOISE_PATTERNS:
+        text = re.sub(pattern, " ", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip(" -–—|•\n\t")
+
+
+def extract_post_focus(post_text: str | None, max_words: int = 10) -> str:
+    """Rút một cụm ý nổi bật từ bài viết để comment không còn là câu mẫu cố định."""
+    cleaned = clean_scanned_post_text(post_text)
+    if not cleaned:
+        return ""
+
+    sentence_candidates = [
+        sentence.strip(" -–—:;,.!?\n\t")
+        for sentence in re.split(r"(?<=[.!?…])\s+|\n+", cleaned)
+        if sentence.strip(" -–—:;,.!?\n\t")
+    ]
+    sentence_candidates = [
+        sentence
+        for sentence in sentence_candidates
+        if len(sentence) >= 18 and not re.fullmatch(r"[\d\W_]+", sentence)
+    ]
+    chosen_sentence = sentence_candidates[0] if sentence_candidates else cleaned
+
+    words = re.findall(r"[A-Za-zÀ-ỹ0-9]+", chosen_sentence)
+    topic_words: List[str] = []
+    for word in words:
+        lowered = word.lower()
+        if len(lowered) <= 1 or lowered in VIETNAMESE_TOPIC_STOPWORDS:
+            continue
+        topic_words.append(word)
+        if len(topic_words) >= max_words:
+            break
+
+    if len(topic_words) >= 3:
+        return " ".join(topic_words).strip()
+
+    compact_sentence = " ".join(words[:max_words]).strip()
+    return compact_sentence
+
+
 def build_contextual_facebook_comment(
     post_text: str | None,
     fallback_comment: str = "",
     *,
     chooser=random.choice,
 ) -> str:
-    """Tạo comment ngắn, liên quan nội dung và tránh dấu hiệu spam thường gặp.
+    """Tạo comment ngắn dựa trực tiếp vào nội dung quét được, không chọn từ bộ câu mẫu cố định.
 
-    Hàm ưu tiên comment sinh theo ngữ cảnh bài viết. Nếu không đọc được bài,
-    comment fallback của người dùng chỉ được dùng khi vượt kiểm tra an toàn cơ bản.
+    Khi không có API AI, hàm vẫn rút một cụm ý nổi bật trong bài rồi viết lại thành
+    một phản hồi tự nhiên. Nếu không đọc được bài, fallback của người dùng chỉ được
+    dùng khi vượt kiểm tra an toàn cơ bản.
     """
-    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()
+    normalized_post = clean_scanned_post_text(post_text)
     fallback = normalize_comment_text(fallback_comment)
     if not normalized_post and is_facebook_standard_comment(fallback):
         return fallback
 
-    category = detect_facebook_post_category(normalized_post)
-    templates = COMMENT_CATEGORY_TEMPLATES.get(category, COMMENT_CATEGORY_TEMPLATES["default"])
-    comment = normalize_comment_text(chooser(templates))
-    if is_facebook_standard_comment(comment):
-        return comment
+    focus = extract_post_focus(normalized_post)
+    if focus:
+        if "?" in normalized_post:
+            comment = (
+                f"Với ý về {focus}, mình nghĩ nên nhìn theo từng tình huống thực tế "
+                "vì mỗi người có thể gặp một bối cảnh khác nhau."
+            )
+        else:
+            comment = (
+                f"Mình thấy phần {focus} khá đáng chú ý, vì nó gợi ra một góc nhìn "
+                "rất dễ liên hệ với thực tế."
+            )
+        comment = normalize_comment_text(comment)
+        if is_facebook_standard_comment(comment):
+            return comment
+
     if is_facebook_standard_comment(fallback):
         return fallback
-    return COMMENT_CATEGORY_TEMPLATES["default"][0]
+    return "Mình thấy nội dung này có vài điểm đáng suy nghĩ và khá dễ liên hệ với thực tế."
 
 
 AI_COMMENT_SYSTEM_PROMPT = """Bạn viết bình luận Facebook tự nhiên, lịch sự và liên quan trực tiếp đến bài viết.
-Yêu cầu: chỉ trả về đúng 1 bình luận tiếng Việt, 1 câu ngắn 40-160 ký tự; không quảng cáo,
+Hãy đọc bài, tự suy nghĩ một ý phù hợp với nội dung cụ thể rồi viết như người thật đang phản hồi.
+Không dùng câu mẫu chung chung như "bài viết hay", "cảm ơn đã chia sẻ", "đáng bàn thêm" nếu không nêu rõ ý trong bài.
+Yêu cầu: chỉ trả về đúng 1 bình luận tiếng Việt, 1 câu ngắn 50-180 ký tự; không quảng cáo,
 không kêu gọi inbox/mua hàng, không link, không hashtag, không tag, không số điện thoại,
 không spam emoji/dấu câu, không cam kết Facebook sẽ hiển thị bình luận."""
 
@@ -316,8 +399,10 @@ def generate_ai_facebook_comment(
             {
                 "role": "user",
                 "content": (
-                    "Hãy đọc nội dung bài viết dưới đây và tạo một bình luận mới, ngẫu nhiên, "
-                    "phù hợp ngữ cảnh nhất. Không sao chép nguyên văn bài viết. "
+                    "Hãy quét và hiểu nội dung bài viết dưới đây, sau đó nghĩ ra một bình luận mới "
+                    "phù hợp riêng với bài này như người thật đang đọc rồi phản hồi. "
+                    "Bình luận phải nhắc hoặc bám vào một ý cụ thể trong bài, không dùng câu mẫu chung chung. "
+                    "Không sao chép nguyên văn bài viết. "
                     f"Mã biến thể để tránh lặp: {variant_id}.\n\n"
                     f"Nội dung bài viết:\n{normalized_post}\n\n"
                     f"Mẫu dự phòng tham khảo nếu phù hợp: {safe_fallback}"

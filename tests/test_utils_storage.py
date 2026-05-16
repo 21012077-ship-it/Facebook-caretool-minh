@@ -98,16 +98,13 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(detect_facebook_post_category("Mọi người nghĩ nên chọn cách nào?"), "question")
 
     def test_build_contextual_facebook_comment_uses_post_context(self):
-        def first(options):
-            return options[0]
-
         comment = build_contextual_facebook_comment(
             "Hướng dẫn cách chăm sóc tài khoản an toàn hơn",
             "Inbox mình để nhận ưu đãi https://example.com",
-            chooser=first,
         )
 
-        self.assertEqual(comment, "Bài viết hữu ích, mình lưu lại để đọc kỹ hơn.")
+        self.assertIn("chăm sóc tài khoản an toàn", comment)
+        self.assertNotIn("Inbox", comment)
         self.assertTrue(is_facebook_standard_comment(comment))
 
     def test_build_contextual_facebook_comment_uses_safe_fallback_without_scan_text(self):
@@ -156,6 +153,7 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
         self.assertEqual(captured["auth"], "Bearer test-key")
         self.assertIn('"model": "test-model"', captured["body"])
+        self.assertIn("không dùng câu mẫu chung chung", captured["body"])
 
     def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
         class FakeResponse:
