@@ -780,13 +780,6 @@ class FacebookCareTool(ctk.CTk):
                 "Thông báo",
                 "Muốn để trống nội dung comment thì hãy bật chế độ tự tạo comment theo nội dung bài. "
                 "Tool sẽ quét bài viết rồi tự sinh comment phù hợp; nếu có API key AI thì ưu tiên gọi AI.",
-        ai_comment_settings = self.get_ai_comment_settings()
-        ai_comment_ready = (
-            scan_before_comment
-            and ai_comment_settings.get("enabled")
-            and bool(ai_comment_settings.get("api_key"))
-        )
-
             )
             return
         try:
