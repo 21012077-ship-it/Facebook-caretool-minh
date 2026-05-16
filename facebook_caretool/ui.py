@@ -20,6 +20,7 @@ from datetime import datetime
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = "{Chào|Hi|Hello} bạn nhé. Chúc một ngày {tốt lành|vui vẻ}!\n\nHỗ trợ Spin Content."
+AI_COMMENT_EMPTY_FALLBACK = "Cảm ơn bạn đã chia sẻ thông tin hữu ích."
 ACCOUNT_RENDER_BATCH_SIZE = 60
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
@@ -444,7 +445,7 @@ class FacebookCareTool(ctk.CTk):
         content_frame.grid_columnconfigure(0, weight=1)
         content_frame.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(content_frame, text="Nội dung Comment", font=("Arial", 16, "bold")).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
+        ctk.CTkLabel(content_frame, text="Nội dung Comment / Fallback", font=("Arial", 16, "bold")).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
 
         self.comment_content = ctk.CTkTextbox(content_frame, wrap="word")
         self.comment_content.grid(row=1, column=0, sticky="nsew", padx=15, pady=5)
@@ -453,14 +454,25 @@ class FacebookCareTool(ctk.CTk):
         self.comment_content.bind("<FocusOut>", self.save_comment_content)
         self.comment_content.bind("<<Paste>>", lambda event: self.after(50, self.save_comment_content))
 
+        ctk.CTkLabel(
+            content_frame,
+            text=(
+                "Bật chế độ tự tạo comment để tool quét nội dung và sinh câu phù hợp theo bài viết. "
+                "Ô này chỉ là mẫu dự phòng; có thể để trống khi chế độ tự tạo đang bật."
+            ),
+            text_color="#a7f3d0",
+            wraplength=420,
+            justify="left",
+        ).grid(row=2, column=0, sticky="ew", padx=15, pady=(0, 6))
+
         tool_cmt = ctk.CTkFrame(content_frame, fg_color="transparent")
-        tool_cmt.grid(row=2, column=0, sticky="ew", padx=15, pady=5)
+        tool_cmt.grid(row=3, column=0, sticky="ew", padx=15, pady=5)
         self.btn_add_image = ctk.CTkButton(tool_cmt, text="📷 Thêm Ảnh/Video", width=130, fg_color="#475569", command=self.choose_comment_image)
         self.btn_add_image.pack(side="left", padx=(0, 10))
         ctk.CTkButton(tool_cmt, text="🔄 Xem thử mẫu Spin", width=130, fg_color="#0d9488", command=self.preview_spin_content).pack(side="left")
 
         self.spin_preview_label = ctk.CTkLabel(content_frame, text="", text_color="#a7f3d0", justify="left", wraplength=350)
-        self.spin_preview_label.grid(row=3, column=0, sticky="w", padx=15, pady=(0, 15))
+        self.spin_preview_label.grid(row=4, column=0, sticky="w", padx=15, pady=(0, 15))
 
         # 3. Danh sách tài khoản chạy
         acc_list_frame = ctk.CTkFrame(setup_frame, corner_radius=10, fg_color="#1e293b")
@@ -497,13 +509,13 @@ class FacebookCareTool(ctk.CTk):
         self.scan_before_cmt_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             right_panel,
-            text="Quét nội dung và dùng AI tạo comment phù hợp",
+            text="Tự tạo comment bằng AI theo nội dung bài",
             variable=self.scan_before_cmt_var,
         ).pack(anchor="w", padx=20, pady=(4, 4))
 
         ctk.CTkLabel(
             right_panel,
-            text="Chế độ mới: tool đọc nội dung bài/comment, gọi AI tạo câu trả lời ngẫu nhiên theo ngữ cảnh, rồi kiểm tra dấu hiệu spam cơ bản; không đảm bảo Facebook luôn hiển thị comment.",
+            text="Khi bật: tool đọc nội dung bài/comment rồi tự tạo câu trả lời theo ngữ cảnh. Nếu có API key AI thì ưu tiên gọi AI; nếu thiếu key hoặc AI lỗi sẽ dùng fallback an toàn.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -758,10 +770,14 @@ class FacebookCareTool(ctk.CTk):
 
         raw_content = self.comment_content.get("1.0", "end-1c").strip()
         self.save_comment_content()
-        if not raw_content:
-            messagebox.showwarning("Thông báo", "Vui lòng nhập nội dung comment!")
+        scan_before_comment = self.scan_before_cmt_var.get()
+        if not raw_content and not scan_before_comment:
+            messagebox.showwarning(
+                "Thông báo",
+                "Muốn để trống nội dung comment thì hãy bật chế độ tự tạo comment theo nội dung bài. "
+                "Tool sẽ quét bài viết rồi tự sinh comment phù hợp; nếu có API key AI thì ưu tiên gọi AI.",
+            )
             return
-
         try:
             comment_limit = int(self.limit_cmt_input.get().strip())
             if comment_limit <= 0:
@@ -787,7 +803,6 @@ class FacebookCareTool(ctk.CTk):
         selected_indexes = list(self.comment_selected_accounts)
         max_parallel_tabs = min(max_parallel_tabs, len(selected_indexes))
         like_before_comment = self.like_before_cmt_var.get()
-        scan_before_comment = self.scan_before_cmt_var.get()
 
         threading.Thread(
             target=self.run_comment_task,
@@ -1216,7 +1231,7 @@ class FacebookCareTool(ctk.CTk):
         }
 
     def build_comment_from_scanned_content(self, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
-        if ai_comment_settings.get("enabled"):
+        if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
             ai_comment = generate_ai_facebook_comment(
                 scanned_post_text,
                 fallback_content,
@@ -1245,7 +1260,16 @@ class FacebookCareTool(ctk.CTk):
     ):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
+        ai_comment_settings = self.get_ai_comment_settings()
+        auto_contextual_mode = scan_before_comment and not (raw_content or "").strip()
         comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
+        if auto_contextual_mode:
+            comment_payloads = build_comment_payloads(AI_COMMENT_EMPTY_FALLBACK, comment_image_paths)
+            if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
+                log_message = "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi AI tạo comment tự động."
+            else:
+                log_message = "🧠 Đang chạy chế độ tự tạo comment: mỗi bài sẽ được quét nội dung rồi chọn câu phù hợp."
+            self.after(0, lambda msg=log_message: self.append_live_log(msg))
 
         if not comment_payloads:
             self.after(0, lambda: messagebox.showwarning("Lỗi", "Không tìm thấy nội dung comment hợp lệ!"))
@@ -1259,12 +1283,11 @@ class FacebookCareTool(ctk.CTk):
                 ),
             )
 
-        ai_comment_settings = self.get_ai_comment_settings()
         if scan_before_comment and ai_comment_settings.get("enabled") and not ai_comment_settings.get("api_key"):
             self.after(
                 0,
                 lambda: self.append_live_log(
-                    "⚠️ Chưa cấu hình API key AI, tool sẽ dùng fallback an toàn khi tạo comment."
+                    "ℹ️ Chưa cấu hình API key AI, tool vẫn tự tạo comment theo ngữ cảnh bằng fallback an toàn."
                 ),
             )
 
