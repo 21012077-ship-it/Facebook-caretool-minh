@@ -472,7 +472,15 @@ def generate_ai_facebook_comment(
     if not keys:
         raise ValueError("Thiếu API key AI, không thể tạo comment.")
 
-    endpoint = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
+    normalized_base = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
+    first_key = keys[0]
+    is_gemini_key = first_key.startswith("AIza")
+    endpoint = normalized_base
+    if is_gemini_key and ("api.openai.com" in normalized_base or not normalized_base):
+        # Gemini API keys (thường bắt đầu bằng AIza...) không gọi được OpenAI endpoint.
+        # Auto chuyển sang endpoint OpenAI-compatible của Google để người dùng khỏi cấu hình sai.
+        endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
     if not endpoint:
         raise ValueError("Thiếu Base URL Chat Completions, không thể tạo comment.")
 
@@ -492,13 +500,16 @@ def generate_ai_facebook_comment(
     last_error_msg = "Không rõ nguyên nhân (Chưa gọi được API)"
 
     for key in keys:
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        }
+        if endpoint.startswith("https://generativelanguage.googleapis.com/"):
+            headers["x-goog-api-key"] = key
         request = urllib.request.Request(
             endpoint,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         response = None
