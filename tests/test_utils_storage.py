@@ -8,7 +8,21 @@ from facebook_caretool.care_planner import build_care_plan, format_care_plan, re
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
-from facebook_caretool.utils import build_comment_payloads, build_contextual_facebook_comment, detect_facebook_post_category, generate_ai_facebook_comment, generate_totp_code, is_facebook_standard_comment, load_json, parse_delay, parse_proxy, save_json, spin_content
+from facebook_caretool.utils import (
+    build_comment_payloads,
+    build_contextual_facebook_comment,
+    detect_facebook_post_category,
+    generate_ai_facebook_comment,
+    generate_totp_code,
+    is_facebook_standard_comment,
+    load_json,
+    normalize_ai_chat_completions_url,
+    parse_delay,
+    parse_proxy,
+    save_json,
+    spin_content,
+    validate_ai_comment,
+)
 
 
 class UtilsTest(unittest.TestCase):
@@ -109,6 +123,38 @@ class UtilsTest(unittest.TestCase):
     def test_is_facebook_standard_comment_rejects_spam_signals(self):
         self.assertFalse(is_facebook_standard_comment("Inbox ngay https://example.com để chốt đơn!!!"))
 
+
+    def test_validate_ai_comment_accepts_short_natural_reactions(self):
+        self.assertEqual(validate_ai_comment("căng thế"), (True, ""))
+
+    def test_generate_ai_facebook_comment_normalizes_v1_base_url_and_skip(self):
+        class FakeResponse:
+            def read(self):
+                return b'{"choices":[{"message":{"content":"SKIP_COMMENT"}}]}'
+
+            def close(self):
+                pass
+
+        captured = {}
+
+        def requester(request, timeout):
+            captured["url"] = request.full_url
+            return FakeResponse()
+
+        self.assertEqual(
+            generate_ai_facebook_comment(
+                "Bài viết không rõ nội dung",
+                api_key="test-key",
+                base_url="https://api.openai.com/v1",
+                requester=requester,
+            ),
+            "SKIP_COMMENT",
+        )
+        self.assertEqual(captured["url"], "https://api.openai.com/v1/chat/completions")
+        self.assertEqual(
+            normalize_ai_chat_completions_url("https://example.com/v1/chat/completions/"),
+            "https://example.com/v1/chat/completions",
+        )
 
     def test_generate_ai_facebook_comment_requires_configuration(self):
         with self.assertRaises(ValueError):

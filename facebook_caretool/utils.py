@@ -440,9 +440,27 @@ def validate_ai_comment(candidate: str | None) -> tuple[bool, str]:
         return False, "generic"
     if len(normalized) > 220 or len(normalized.split()) > 35:
         return False, "too_long"
-    if not is_facebook_standard_comment(normalized):
-        return False, "standard_filter"
+
+    # Không dùng is_facebook_standard_comment() ở đây vì hàm đó yêu cầu tối thiểu
+    # 12 ký tự cho comment tự soạn. AI prompt lại khuyến khích các phản ứng rất
+    # ngắn kiểu "căng thế", "lộ quá rồi", nên filter cũ làm AI có trả lời nhưng
+    # app vẫn bỏ qua và người dùng thấy như không ra comment. Giữ riêng các mẫu
+    # chặn spam/quảng cáo để không đăng nội dung nguy hiểm.
+    if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in FACEBOOK_COMMENT_BLOCKLIST_PATTERNS):
+        return False, "spam_filter"
     return True, ""
+
+
+def normalize_ai_chat_completions_url(base_url: str | None) -> str:
+    """Chuẩn hóa URL AI: cho phép nhập cả endpoint đầy đủ hoặc base /v1."""
+    normalized = (base_url or "").strip().rstrip("/")
+    if not normalized:
+        return ""
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    if normalized.endswith("/v1"):
+        return f"{normalized}/chat/completions"
+    return normalized
 
 
 def generate_ai_facebook_comment(
@@ -460,7 +478,8 @@ def generate_ai_facebook_comment(
     normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
     if not api_key.strip():
         raise ValueError("Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.")
-    if not model.strip() or not base_url.strip():
+    normalized_base_url = normalize_ai_chat_completions_url(base_url)
+    if not model.strip() or not normalized_base_url:
         raise ValueError("Thiếu cấu hình model/base_url AI, bỏ qua link vì không thể tạo comment bằng AI.")
 
     payload = {
@@ -474,7 +493,7 @@ def generate_ai_facebook_comment(
     }
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
-        base_url.strip(),
+        normalized_base_url,
         data=data,
         headers={
             "Authorization": f"Bearer {api_key.strip()}",
@@ -492,13 +511,23 @@ def generate_ai_facebook_comment(
             if close:
                 close()
         candidate = extract_ai_comment_text(json.loads(raw_response))
-    except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError, TypeError):
-        return None
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            detail = str(exc)
+        raise ValueError(f"OpenAI API lỗi {exc.code}: {detail or exc.reason}") from exc
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError, TypeError) as exc:
+        raise ValueError(f"Không gọi được AI tạo comment: {exc}") from exc
 
-    is_valid, _reason = validate_ai_comment(candidate)
+    is_valid, reason = validate_ai_comment(candidate)
     if is_valid:
         return candidate
+    if reason == "skip":
+        return "SKIP_COMMENT"
     return None
+
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.
