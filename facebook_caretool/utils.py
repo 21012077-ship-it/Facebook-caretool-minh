@@ -445,6 +445,10 @@ def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[b
     return True, ""
 
 
+GEMINI_OPENAI_CHAT_COMPLETIONS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+GEMINI_API_KEY_PREFIXES = ("AIza", "gen-lang")
+
+
 def normalize_ai_chat_completions_url(base_url: str | None) -> str:
     """Chuẩn hóa URL AI: cho phép nhập cả endpoint đầy đủ hoặc base /v1."""
     normalized = (base_url or "").strip().rstrip("/")
@@ -455,6 +459,30 @@ def normalize_ai_chat_completions_url(base_url: str | None) -> str:
     if normalized.endswith("/v1"):
         return f"{normalized}/chat/completions"
     return normalized
+
+
+def is_gemini_ai_config(api_key: str = "", model: str = "", base_url: str = "") -> bool:
+    """Nhận diện cấu hình Gemini để tránh gửi nhầm key/model sang endpoint OpenAI."""
+    first_key = next((key.strip() for key in (api_key or "").split(",") if key.strip()), "")
+    normalized_model = (model or "").strip().lower()
+    normalized_base = (base_url or "").strip().lower()
+    return (
+        first_key.startswith(GEMINI_API_KEY_PREFIXES)
+        or normalized_model.startswith("gemini")
+        or "generativelanguage.googleapis.com" in normalized_base
+    )
+
+
+def resolve_ai_chat_completions_url(api_key: str = "", model: str = "", base_url: str = "") -> str:
+    """Chọn endpoint Chat Completions đúng cho OpenAI-compatible hoặc Gemini."""
+    normalized_base = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
+    if is_gemini_ai_config(api_key=api_key, model=model, base_url=normalized_base) and (
+        not normalized_base or "api.openai.com" in normalized_base
+    ):
+        # Gemini API keys/model không gọi được OpenAI endpoint. Google hỗ trợ OpenAI-compatible
+        # Chat Completions qua generativelanguage.googleapis.com/v1beta/openai/chat/completions.
+        return GEMINI_OPENAI_CHAT_COMPLETIONS_URL
+    return normalized_base
 
 def generate_ai_facebook_comment(
     post_text: str | None,
@@ -472,14 +500,7 @@ def generate_ai_facebook_comment(
     if not keys:
         raise ValueError("Thiếu API key AI, không thể tạo comment.")
 
-    normalized_base = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
-    first_key = keys[0]
-    is_gemini_key = first_key.startswith("AIza")
-    endpoint = normalized_base
-    if is_gemini_key and ("api.openai.com" in normalized_base or not normalized_base):
-        # Gemini API keys (thường bắt đầu bằng AIza...) không gọi được OpenAI endpoint.
-        # Auto chuyển sang endpoint OpenAI-compatible của Google để người dùng khỏi cấu hình sai.
-        endpoint = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    endpoint = resolve_ai_chat_completions_url(api_key=api_key, model=model, base_url=base_url)
 
     if not endpoint:
         raise ValueError("Thiếu Base URL Chat Completions, không thể tạo comment.")

@@ -61,7 +61,7 @@ python -m playwright install chromium
 Trong tab **Comment**, nếu muốn dùng AI thật để tự nghĩ comment theo từng bài:
 
 1. Vào **Cài đặt → AI tạo comment**, bật **Bật AI tự nghĩ comment theo bài viết**.
-2. Nhập API key OpenAI-compatible, model và endpoint chat completions, rồi bấm **Lưu cài đặt AI**. Có thể dùng biến môi trường `OPENAI_API_KEY` thay cho việc lưu key trong app.
+2. Nhập API key OpenAI-compatible, model và endpoint chat completions, rồi bấm **Lưu cài đặt AI**. Có thể dùng biến môi trường `OPENAI_API_KEY` thay cho việc lưu key trong app. Nếu dùng Gemini (`gemini-*` hoặc key Gemini), tool sẽ tự chuyển sang endpoint OpenAI-compatible của Google: `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
 3. Ở màn **Comment**, bật **Tự tạo comment theo nội dung bài** và nên để trống ô **Nội dung Comment / Fallback** để chạy chế độ AI-only.
 4. Khi campaign chạy, log sẽ hiện model/key rút gọn nếu đang gọi AI thật; nếu chưa có key, log sẽ báo rõ “Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.”
 
@@ -78,7 +78,8 @@ npm install
 Chuẩn bị API key:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+export OPENAI_API_KEY="sk-..."              # OpenAI
+# hoặc dùng Gemini: export OPENAI_API_KEY="gen-lang..." / "AIza..." và OPENAI_COMMENT_MODEL="gemini-1.5-flash"
 ```
 
 Chạy preview (mặc định, không tự đăng):

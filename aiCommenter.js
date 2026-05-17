@@ -4,6 +4,8 @@ const path = require('node:path');
 const DEFAULT_COMMENT_MODEL = process.env.OPENAI_COMMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DEFAULT_VISION_MODEL = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+const GEMINI_OPENAI_CHAT_COMPLETIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+const GEMINI_API_KEY_PREFIXES = ['AIza', 'gen-lang'];
 const SKIP_COMMENT = 'SKIP_COMMENT';
 
 const BANNED_COMMENT_PATTERNS = [
@@ -24,6 +26,30 @@ function requireApiKey() {
     throw error;
   }
   return apiKey;
+}
+
+function normalizeChatCompletionsUrl(baseUrl) {
+  const normalized = String(baseUrl || '').trim().replace(/\/$/, '');
+  if (!normalized) return '';
+  if (normalized.endsWith('/chat/completions')) return normalized;
+  if (normalized.endsWith('/v1')) return `${normalized}/chat/completions`;
+  return normalized;
+}
+
+function isGeminiConfig({ apiKey = '', model = '', baseUrl = '' }) {
+  return (
+    GEMINI_API_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))
+    || String(model || '').trim().toLowerCase().startsWith('gemini')
+    || String(baseUrl || '').toLowerCase().includes('generativelanguage.googleapis.com')
+  );
+}
+
+function resolveChatCompletionsUrl({ apiKey = '', model = '', baseUrl = OPENAI_BASE_URL }) {
+  const normalized = normalizeChatCompletionsUrl(baseUrl || 'https://api.openai.com/v1');
+  if (isGeminiConfig({ apiKey, model, baseUrl: normalized }) && (!normalized || normalized.includes('api.openai.com'))) {
+    return GEMINI_OPENAI_CHAT_COMPLETIONS_URL;
+  }
+  return normalized;
 }
 
 function compactText(value, maxLength = 3000) {
@@ -105,12 +131,18 @@ Hãy trả về đúng 1 bình luận phù hợp nhất.`;
 
 async function callChatCompletion({ model, messages, maxTokens = 120, temperature = 0.85 }) {
   const apiKey = requireApiKey();
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+  const endpoint = resolveChatCompletionsUrl({ apiKey, model, baseUrl: OPENAI_BASE_URL });
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (endpoint.startsWith('https://generativelanguage.googleapis.com/')) {
+    headers['x-goog-api-key'] = apiKey;
+  }
+
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages,

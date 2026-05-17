@@ -15,7 +15,7 @@ from .utils import (
     generate_ai_facebook_comment,
     generate_totp_code,
     load_json,
-    normalize_ai_chat_completions_url,
+    resolve_ai_chat_completions_url,
     random_delay,
     save_json,
     spin_content,
@@ -669,7 +669,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="AI tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Nhập API key/model OpenAI-compatible để tool quét bài rồi tự nghĩ comment mới, tự nhiên và bám nội dung cụ thể. Nếu thiếu key hoặc API lỗi, tool sẽ bỏ qua link và không tạo fallback.",
+            text="Nhập API key/model OpenAI-compatible (OpenAI hoặc Gemini). Nếu dùng model/key Gemini, tool sẽ tự chuyển sang endpoint Gemini OpenAI-compatible.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
@@ -1374,7 +1374,7 @@ class FacebookCareTool(ctk.CTk):
             model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
         if hasattr(self, "ai_comment_base_url_entry"):
             base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
-        base_url = normalize_ai_chat_completions_url(base_url)
+        base_url = resolve_ai_chat_completions_url(api_key=api_key, model=model, base_url=base_url)
 
         return {
             "enabled": enabled,
@@ -1797,9 +1797,14 @@ class FacebookCareTool(ctk.CTk):
             return
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
         self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
-        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
-        self.app_settings["ai_comment_base_url"] = normalize_ai_chat_completions_url(
-            self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+        api_key = self.ai_comment_api_key_entry.get().strip()
+        model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+        base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+        self.app_settings["ai_comment_model"] = model
+        self.app_settings["ai_comment_base_url"] = resolve_ai_chat_completions_url(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
         )
 
     def save_app_settings(self):

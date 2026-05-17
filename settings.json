@@ -5,7 +5,7 @@
     "import_overwrite_default": false,
     "comment_content": "",
     "ai_comment_enabled": true,
-    "ai_comment_api_key": "AIzaSyCYbGS8GWXvN_tz2wqOLHqjcpSkpHG9Ank",
+    "ai_comment_api_key": "",
     "ai_comment_model": "gemini-1.5-flash",
-    "ai_comment_base_url": "https://api.openai.com/v1/chat/completions"
+    "ai_comment_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 }
