@@ -118,8 +118,8 @@ Yêu cầu bắt buộc:
 - Bắt buộc viết thành một câu hoàn chỉnh từ 7 đến 25 từ
 - Không lặp lại nguyên văn caption hoặc comment gốc
 - Không trả lời chung chung nếu không hiểu bài/comment
-- Nếu thiếu nội dung bài viết hoặc không quét được comment cần trả lời, trả về chính xác chuỗi:
-SKIP_COMMENT
+- Nếu dữ liệu bài viết thiếu hoặc mơ hồ nhưng vẫn có comment cần trả lời, vẫn phải viết 1 reply an toàn bám theo ý comment đã quét
+- Chỉ trả về SKIP_COMMENT khi comment cần trả lời hoàn toàn trống hoặc không đọc được
 
 Dữ liệu bài viết:
 ${buildPostContextLines(postData)}
@@ -127,7 +127,7 @@ ${buildPostContextLines(postData)}
 Comment cần trả lời:
 - ${compactText(targetComment, 1200) || '(không lấy được)'}
 
-Hãy trả về đúng 1 reply phù hợp với cả bài viết và comment cần trả lời.`;
+Hãy trả về đúng 1 reply phù hợp với comment cần trả lời; nếu ngữ cảnh bài viết thiếu thì ưu tiên bám theo comment đã quét, không bỏ qua.`;
 }
 
 function sanitizeOneLineComment(text) {
