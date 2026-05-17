@@ -28,3 +28,7 @@ exports/
 Thumbs.db
 .vscode/
 .idea/
+# Node / Facebook comment CLI
+node_modules/
+fb_comment_profile/
+.tmp_fb_comment_media/

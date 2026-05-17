@@ -54,6 +54,42 @@ python -m playwright install chromium
 - `socks4://host:port`, `http://host:port`, `https://host:port`
 - `socks5:host:port:user:pass` hoặc `host:port:user:pass:socks5`
 
+
+## CLI tự động tạo bình luận Facebook bằng AI
+
+CLI Node.js mới hỗ trợ nhập link bài viết Facebook, mở Chromium bằng profile cố định để giữ đăng nhập, quét caption/media text nếu có, gọi AI tạo một bình luận Gen Z Việt Nam và mặc định chỉ preview.
+
+Cài dependency Node:
+
+```bash
+npm install
+```
+
+Chuẩn bị API key:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Chạy preview (mặc định, không tự đăng):
+
+```bash
+node index.js "https://www.facebook.com/..."
+```
+
+Tự đăng comment sau khi AI tạo nội dung:
+
+```bash
+node index.js "https://www.facebook.com/..." --post
+```
+
+Ghi chú vận hành:
+
+- Chromium dùng profile cố định `fb_comment_profile/` (hoặc đặt `FB_PROFILE_DIR=/duong/dan/profile`) để giữ trạng thái đăng nhập Facebook.
+- Nếu profile chưa đăng nhập, tool sẽ dừng và báo đăng nhập trước.
+- Mặc định tool cố gắng OCR chữ trong ảnh/thumbnail bằng OpenAI vision từ screenshot media; có thể tắt bằng `FB_COMMENT_ENABLE_VISION=0`.
+- Không có flag `--post` thì tool chỉ in comment ở chế độ preview, không dán và không tự bấm đăng.
+
 ## Chạy ứng dụng
 
 ```bash
