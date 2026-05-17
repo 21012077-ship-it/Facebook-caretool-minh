@@ -97,15 +97,24 @@ class UtilsTest(unittest.TestCase):
     def test_detect_facebook_post_category_question(self):
         self.assertEqual(detect_facebook_post_category("Mọi người nghĩ nên chọn cách nào?"), "question")
 
-    def test_build_contextual_facebook_comment_uses_post_context(self):
+    def test_build_contextual_facebook_comment_uses_scanned_text_directly(self):
+        scanned_text = "Hướng dẫn cách chăm sóc tài khoản an toàn hơn"
         comment = build_contextual_facebook_comment(
-            "Hướng dẫn cách chăm sóc tài khoản an toàn hơn",
+            scanned_text,
             "Inbox mình để nhận ưu đãi https://example.com",
         )
 
-        self.assertIn("chăm sóc tài khoản an toàn", comment)
+        self.assertEqual(comment, scanned_text)
         self.assertNotIn("Inbox", comment)
         self.assertTrue(is_facebook_standard_comment(comment))
+
+    def test_build_contextual_facebook_comment_keeps_scanned_question_directly(self):
+        scanned_text = "ủa khoan này là chiếu lại hay p2 hẵn hoi z ae? phần kết ảnh bị phản bội bởi con trai là p1 hay p2 ấy nhỉ"
+
+        self.assertEqual(
+            build_contextual_facebook_comment(scanned_text, "Mình thấy nội dung này khá hữu ích và thực tế."),
+            scanned_text,
+        )
 
     def test_build_contextual_facebook_comment_uses_safe_fallback_without_scan_text(self):
         self.assertEqual(

@@ -338,6 +338,13 @@ def build_contextual_facebook_comment(
 
     focus = extract_post_focus(normalized_post)
     if focus:
+        # Khi đã quét được nội dung Facebook rõ ràng thì dùng trực tiếp chính
+        # phần đã quét, thay vì viết lại thành câu mẫu chung chung. Điều này
+        # giúp phản hồi bám đúng comment/bài viết mà tool vừa đọc được.
+        scanned_comment = normalize_comment_text(normalized_post)
+        if is_facebook_standard_comment(scanned_comment):
+            return scanned_comment
+
         if "?" in normalized_post:
             comment = (
                 f"Với ý về {focus}, mình nghĩ nên nhìn theo từng tình huống thực tế "
