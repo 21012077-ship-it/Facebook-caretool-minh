@@ -11,8 +11,6 @@ import re
 import struct
 import tempfile
 import time as time_module
-import urllib.error
-import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -414,15 +412,6 @@ Dữ liệu bài viết:
 Hãy trả về đúng 1 bình luận phù hợp nhất."""
 
 
-def extract_ai_comment_text(response_payload: Dict[str, Any]) -> str:
-    """Lấy text bình luận từ payload Chat Completions/OpenAI-compatible."""
-    try:
-        content = response_payload["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        return ""
-    return normalize_comment_text(str(content).strip().strip('"“”'))
-
-
 def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[bool, str]:
     normalized = normalize_comment_text(candidate)
     if not normalized:
@@ -436,53 +425,9 @@ def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[b
         return False, "too_short"
     if len(normalized) > 220 or word_count > 35:
         return False, "too_long"
-
-    # Không dùng is_facebook_standard_comment() ở đây vì hàm đó có ngưỡng tối thiểu
-    # cố định cho comment tự soạn. Luồng AI cần tự truyền min_words khi muốn ép câu
-    # đủ ý, đồng thời vẫn giữ riêng các mẫu chặn spam/quảng cáo nguy hiểm.
     if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in FACEBOOK_COMMENT_BLOCKLIST_PATTERNS):
         return False, "spam_filter"
     return True, ""
-
-
-GEMINI_OPENAI_CHAT_COMPLETIONS_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-GEMINI_API_KEY_PREFIXES = ("AIza", "gen-lang")
-
-
-def normalize_ai_chat_completions_url(base_url: str | None) -> str:
-    """Chuẩn hóa URL AI: cho phép nhập cả endpoint đầy đủ hoặc base /v1."""
-    normalized = (base_url or "").strip().rstrip("/")
-    if not normalized:
-        return ""
-    if normalized.endswith("/chat/completions"):
-        return normalized
-    if normalized.endswith("/v1"):
-        return f"{normalized}/chat/completions"
-    return normalized
-
-
-def is_gemini_ai_config(api_key: str = "", model: str = "", base_url: str = "") -> bool:
-    """Nhận diện cấu hình Gemini để tránh gửi nhầm key/model sang endpoint OpenAI."""
-    first_key = next((key.strip() for key in (api_key or "").split(",") if key.strip()), "")
-    normalized_model = (model or "").strip().lower()
-    normalized_base = (base_url or "").strip().lower()
-    return (
-        first_key.startswith(GEMINI_API_KEY_PREFIXES)
-        or normalized_model.startswith("gemini")
-        or "generativelanguage.googleapis.com" in normalized_base
-    )
-
-
-def resolve_ai_chat_completions_url(api_key: str = "", model: str = "", base_url: str = "") -> str:
-    """Chọn endpoint Chat Completions đúng cho OpenAI-compatible hoặc Gemini."""
-    normalized_base = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
-    if is_gemini_ai_config(api_key=api_key, model=model, base_url=normalized_base) and (
-        not normalized_base or "api.openai.com" in normalized_base
-    ):
-        # Gemini API keys/model không gọi được OpenAI endpoint. Google hỗ trợ OpenAI-compatible
-        # Chat Completions qua generativelanguage.googleapis.com/v1beta/openai/chat/completions.
-        return GEMINI_OPENAI_CHAT_COMPLETIONS_URL
-    return normalized_base
 
 def generate_ai_facebook_comment(
     post_text: str | None,
@@ -495,66 +440,17 @@ def generate_ai_facebook_comment(
     timeout: float = 25,
     requester: Any = None,
 ) -> str | None:
-    """Gọi endpoint Chat Completions/OpenAI-compatible để tạo comment AI."""
-    keys = [key.strip() for key in api_key.split(",") if key.strip()]
-    if not keys:
-        raise ValueError("Thiếu API key AI, không thể tạo comment.")
+    """Không còn gọi API AI; giữ hàm cũ để báo migration rõ ràng.
 
-    endpoint = resolve_ai_chat_completions_url(api_key=api_key, model=model, base_url=base_url)
-
-    if not endpoint:
-        raise ValueError("Thiếu Base URL Chat Completions, không thể tạo comment.")
-
-    prompt = build_ai_comment_prompt(post_text)
-    payload = {
-        "model": model or "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": AI_COMMENT_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": max(0.0, min(float(temperature), 1.0)),
-        # 120 tokens đủ cho câu 7-25 từ, tránh model bị cắt cụt giữa câu.
-        "max_tokens": 120,
-    }
-
-    opener = requester or urllib.request.urlopen
-    last_error_msg = "Không rõ nguyên nhân (Chưa gọi được API)"
-
-    for key in keys:
-        headers = {
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        }
-        if endpoint.startswith("https://generativelanguage.googleapis.com/"):
-            headers["x-goog-api-key"] = key
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        response = None
-        try:
-            response = opener(request, timeout=timeout)
-            raw_body = response.read().decode("utf-8")
-            data = json.loads(raw_body)
-            candidate = extract_ai_comment_text(data)
-            is_valid, reason = validate_ai_comment(candidate, min_words=7)
-            if is_valid:
-                return candidate
-            if reason == "skip":
-                return "SKIP_COMMENT"
-            return None
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
-            last_error_msg = f"HTTP {exc.code}: {detail or exc.reason}"
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
-            last_error_msg = str(exc)
-        finally:
-            if response is not None and hasattr(response, "close"):
-                response.close()
-
-    raise ValueError(f"Lỗi khi gọi AI: {last_error_msg[:180]}")
+    Luồng comment mới phải dùng :func:`build_ai_comment_prompt` rồi paste prompt
+    vào https://chatgpt.com trong browser đã đăng nhập cookie. Các tham số API
+    được giữ lại chỉ để không phá import cũ, nhưng tuyệt đối không tạo request
+    OpenAI/Gemini tại đây.
+    """
+    raise ValueError(
+        "Đã tắt hoàn toàn gọi API OpenAI/Gemini. Hãy dùng luồng ChatGPT thủ công "
+        "trên chatgpt.com bằng cookie trình duyệt."
+    )
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.

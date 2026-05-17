@@ -11,11 +11,11 @@ from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
 from .utils import (
+    build_ai_comment_prompt,
     build_comment_payloads,
-    generate_ai_facebook_comment,
     generate_totp_code,
     load_json,
-    resolve_ai_chat_completions_url,
+    validate_ai_comment,
     random_delay,
     save_json,
     spin_content,
@@ -66,9 +66,6 @@ class FacebookCareTool(ctk.CTk):
             "import_overwrite_default": False,
             "comment_content": DEFAULT_COMMENT_CONTENT,
             "ai_comment_enabled": True,
-            "ai_comment_base_url": "https://api.openai.com/v1/chat/completions",
-            "ai_comment_model": "gpt-4o-mini",
-            "ai_comment_api_key": "",
         })
         self.comment_content_save_job = None
         self.account_refresh_job = None
@@ -467,7 +464,7 @@ class FacebookCareTool(ctk.CTk):
             text=(
 
                 "Nên để trống ô này và bật tự tạo comment: tool sẽ quét bài viết rồi tự nghĩ câu mới bám đúng nội dung bài. "
-                "Có thể nhập comment thủ công; nếu để trống và bật tự tạo theo bài thì bắt buộc cần API key AI."
+                "Có thể nhập comment thủ công; nếu để trống và bật tự tạo theo bài thì cần đăng nhập ChatGPT sẵn trong trình duyệt."
 
             ),
             text_color="#a7f3d0",
@@ -526,7 +523,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(
             right_panel,
 
-            text="Khi bật: tool chỉ đọc nội dung bài post chính rồi gọi AI để tự nghĩ comment mới, bám ý cụ thể trong bài. Nếu thiếu API key hoặc AI không trả về comment hợp lệ thì bỏ qua link; không tự bịa fallback.",
+            text="Khi bật: tool đọc nội dung bài post chính, mở chatgpt.com bằng cookie trình duyệt, paste prompt để lấy comment mới bám ý cụ thể. Nếu ChatGPT chưa đăng nhập hoặc trả comment không hợp lệ thì bỏ qua link; không tự bịa fallback.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -666,29 +663,17 @@ class FacebookCareTool(ctk.CTk):
 
         ai_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
         ai_frame.grid(row=1, column=0, sticky="ew", pady=12)
-        ctk.CTkLabel(ai_frame, text="AI tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
+        ctk.CTkLabel(ai_frame, text="ChatGPT thủ công tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Nhập API key/model OpenAI-compatible (OpenAI hoặc Gemini). Nếu dùng model/key Gemini, tool sẽ tự chuyển sang endpoint Gemini OpenAI-compatible.",
+            text="Không gọi API OpenAI/Gemini. Tool sẽ mở https://chatgpt.com trong cùng trình duyệt, dùng cookie đăng nhập sẵn, paste prompt + dữ liệu bài đã quét rồi lấy comment trả về.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
         ).pack(fill="x", padx=18, pady=(0, 10))
         self.ai_comment_enabled_var = ctk.BooleanVar(value=bool(self.app_settings.get("ai_comment_enabled", True)))
-        ctk.CTkCheckBox(ai_frame, text="Bật AI tự nghĩ comment theo bài viết", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
-        ctk.CTkLabel(ai_frame, text="API Key", anchor="w").pack(fill="x", padx=18, pady=(8, 0))
-        self.ai_comment_api_key_entry = ctk.CTkEntry(ai_frame, show="*")
-        self.ai_comment_api_key_entry.pack(fill="x", padx=18, pady=(4, 8))
-        self.ai_comment_api_key_entry.insert(0, self.app_settings.get("ai_comment_api_key", ""))
-        ctk.CTkLabel(ai_frame, text="Model", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
-        self.ai_comment_model_entry = ctk.CTkEntry(ai_frame)
-        self.ai_comment_model_entry.pack(fill="x", padx=18, pady=(4, 8))
-        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gpt-4o-mini"))
-        ctk.CTkLabel(ai_frame, text="Base URL Chat Completions", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
-        self.ai_comment_base_url_entry = ctk.CTkEntry(ai_frame)
-        self.ai_comment_base_url_entry.pack(fill="x", padx=18, pady=(4, 12))
-        self.ai_comment_base_url_entry.insert(0, self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions"))
-        ctk.CTkButton(ai_frame, text="Lưu cài đặt AI", width=140, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(0, 16))
+        ctk.CTkCheckBox(ai_frame, text="Bật ChatGPT thủ công tự nghĩ comment theo bài viết", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
+        ctk.CTkButton(ai_frame, text="Lưu cài đặt ChatGPT", width=180, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(8, 16))
 
         io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
         io_frame.grid(row=2, column=0, sticky="ew", pady=12)
@@ -788,7 +773,7 @@ class FacebookCareTool(ctk.CTk):
             messagebox.showwarning(
                 "Thông báo",
                 "Muốn để trống nội dung comment thì hãy bật chế độ tự tạo comment theo nội dung bài. "
-                "Tool sẽ quét bài viết rồi gửi vào AI để tự sinh comment phù hợp; thiếu API key thì bỏ qua link.",
+                "Tool sẽ quét bài viết rồi paste vào ChatGPT trên web để tự sinh comment phù hợp; nếu ChatGPT chưa đăng nhập thì bỏ qua link.",
             )
             return
         try:
@@ -1355,64 +1340,122 @@ class FacebookCareTool(ctk.CTk):
         return True
 
     def get_ai_comment_settings(self):
-        """Lấy cấu hình AI mới nhất từ UI, settings đã lưu hoặc biến môi trường.
-
-        Người dùng hay nhập API key/model ở màn Cài đặt rồi bấm chạy campaign ngay,
-        chưa kịp bấm "Lưu cài đặt AI". Vì vậy hàm này ưu tiên đọc trực tiếp từ
-        widget nếu widget đã được tạo, sau đó mới fallback về settings.json/env.
-        """
+        """Lấy cấu hình chế độ ChatGPT thủ công mới nhất từ UI/settings."""
         enabled = bool(self.app_settings.get("ai_comment_enabled", True))
-        api_key = self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
-        model = self.app_settings.get("ai_comment_model", "gpt-4o-mini")
-        base_url = self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions")
-
         if hasattr(self, "ai_comment_enabled_var"):
             enabled = bool(self.ai_comment_enabled_var.get())
-        if hasattr(self, "ai_comment_api_key_entry"):
-            api_key = self.ai_comment_api_key_entry.get().strip() or os.environ.get("OPENAI_API_KEY", "")
-        if hasattr(self, "ai_comment_model_entry"):
-            model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
-        if hasattr(self, "ai_comment_base_url_entry"):
-            base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
-        base_url = resolve_ai_chat_completions_url(api_key=api_key, model=model, base_url=base_url)
+        return {"enabled": enabled}
 
-        return {
-            "enabled": enabled,
-            "api_key": api_key,
-            "model": model,
-            "base_url": base_url,
-        }
-
-    def build_comment_from_scanned_content(self, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
+    def build_comment_from_scanned_content(self, page, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
         if not ai_comment_settings.get("enabled"):
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ AI đang tắt, bỏ qua link vì không thể tạo comment bằng AI."))
-            return None
-        if not ai_comment_settings.get("api_key"):
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."))
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."))
             return None
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment..."))
-
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Mở ChatGPT thủ công bằng cookie trình duyệt, paste prompt + dữ liệu bài đã quét..."))
         try:
-            ai_comment = generate_ai_facebook_comment(
-                scanned_post_text,
-                "",
-                api_key=ai_comment_settings.get("api_key", ""),
-                model=ai_comment_settings.get("model", "gpt-4o-mini"),
-                base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
-            )
-        except ValueError as exc:
-            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ {err}"))
+            chat_comment = self.generate_comment_with_manual_chatgpt(page, scanned_post_text, acc_name)
+        except Exception as exc:
+            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ ChatGPT thủ công lỗi: {err[:160]}"))
             return None
 
-        if ai_comment == "SKIP_COMMENT":
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài."))
+        if chat_comment == "SKIP_COMMENT":
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ ChatGPT trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài."))
             return None
-        if ai_comment:
-            return ai_comment
+        if chat_comment:
+            return chat_comment
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, bỏ qua bài."))
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ ChatGPT chưa tạo được comment hợp lệ, bỏ qua bài."))
         return None
+
+    def generate_comment_with_manual_chatgpt(self, facebook_page, scanned_post_text, acc_name):
+        prompt = build_ai_comment_prompt(scanned_post_text)
+        chat_page = facebook_page.context.new_page()
+        try:
+            chat_page.goto("https://chatgpt.com/", wait_until="domcontentloaded", timeout=90000)
+            try:
+                chat_page.wait_for_load_state("networkidle", timeout=25000)
+            except Exception:
+                pass
+            if not self.interruptible_sleep(3):
+                return None
+
+            composer_selectors = [
+                "#prompt-textarea",
+                "div[contenteditable='true'][id='prompt-textarea']",
+                "textarea[data-testid='prompt-textarea']",
+                "textarea[placeholder*='Message' i]",
+                "textarea[placeholder*='Nhắn' i]",
+                "div[contenteditable='true']",
+            ]
+            composer = None
+            for selector in composer_selectors:
+                try:
+                    candidate = chat_page.locator(selector).last
+                    if candidate.is_visible(timeout=3000):
+                        composer = candidate
+                        break
+                except Exception:
+                    continue
+            if composer is None:
+                raise RuntimeError("Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong browser/cookie profile rồi chạy lại.")
+
+            assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
+            try:
+                before_count = chat_page.locator(assistant_selector).count()
+            except Exception:
+                before_count = 0
+
+            composer.click(timeout=10000)
+            chat_page.keyboard.press("Control+A")
+            chat_page.keyboard.insert_text(prompt)
+            if not self.interruptible_sleep(random.uniform(0.5, 1.2)):
+                return None
+
+            send_selectors = "[data-testid='send-button'], button[aria-label*='Send' i], button[aria-label*='Gửi' i]"
+            try:
+                send_button = chat_page.locator(send_selectors).last
+                if send_button.is_visible(timeout=2500):
+                    send_button.click(timeout=10000)
+                else:
+                    chat_page.keyboard.press("Enter")
+            except Exception:
+                chat_page.keyboard.press("Enter")
+
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
+            try:
+                chat_page.wait_for_function(
+                    "([selector, count]) => document.querySelectorAll(selector).length > count",
+                    [assistant_selector, before_count],
+                    timeout=180000,
+                )
+            except Exception:
+                pass
+            try:
+                chat_page.wait_for_function(
+                    "() => !document.querySelector('[data-testid=\"stop-button\"], button[aria-label*=\"Stop\" i], button[aria-label*=\"Dừng\" i]')",
+                    timeout=180000,
+                )
+            except Exception:
+                pass
+            if not self.interruptible_sleep(1.5):
+                return None
+
+            responses = chat_page.locator(assistant_selector).evaluate_all(
+                "nodes => nodes.map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)"
+            )
+            raw_comment = responses[-1] if responses else ""
+            is_valid, reason = validate_ai_comment(raw_comment, min_words=7)
+            if is_valid:
+                return raw_comment.strip().strip('\"“”')
+            if reason == "skip":
+                return "SKIP_COMMENT"
+            self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
+            return None
+        finally:
+            try:
+                chat_page.close()
+            except Exception:
+                pass
 
     def run_comment_task(
         self,
@@ -1435,16 +1478,10 @@ class FacebookCareTool(ctk.CTk):
         if auto_contextual_mode:
             comment_payloads = [{"text": "", "media_path": comment_image_paths[0] if comment_image_paths else ""}]
 
-            if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
-                masked_key = ai_comment_settings.get("api_key", "")[:7] + "..."
-                log_message = (
-                    "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi gửi vào AI "
-                    f"({ai_comment_settings.get('model')}, key {masked_key}) để tự nghĩ comment phù hợp."
-                )
-            elif ai_comment_settings.get("enabled"):
-                log_message = "❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."
+            if ai_comment_settings.get("enabled"):
+                log_message = "🤖 Đang chạy chế độ ChatGPT thủ công: mỗi bài sẽ được quét nội dung, paste vào chatgpt.com bằng cookie trình duyệt rồi lấy comment trả về."
             else:
-                log_message = "❌ AI đang tắt, bỏ qua link vì không thể tạo comment bằng AI."
+                log_message = "❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."
 
             self.after(0, lambda msg=log_message: self.append_live_log(msg))
 
@@ -1457,14 +1494,6 @@ class FacebookCareTool(ctk.CTk):
                 0,
                 lambda count=len(comment_image_paths): self.append_live_log(
                     f"📷 Ảnh/video sẽ đi kèm từng comment (không gửi tách riêng). Đang dùng {count} file."
-                ),
-            )
-
-        if scan_before_comment and ai_comment_settings.get("enabled") and not ai_comment_settings.get("api_key"):
-            self.after(
-                0,
-                lambda: self.append_live_log(
-                    "❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."
                 ),
             )
 
@@ -1534,6 +1563,7 @@ class FacebookCareTool(ctk.CTk):
                             if scanned_post_text is None:
                                 break
                             final_content = self.build_comment_from_scanned_content(
+                                page,
                                 scanned_post_text,
                                 fallback_content,
                                 acc_name,
@@ -1548,7 +1578,7 @@ class FacebookCareTool(ctk.CTk):
                             self.after(
                                 0,
                                 lambda n=acc_name, text=final_content: self.append_live_log(
-                                    f"[{n}] 💬 Comment AI đề xuất: {text}"
+                                    f"[{n}] 💬 Comment ChatGPT đề xuất: {text}"
                                 ),
                             )
 
@@ -1796,16 +1826,9 @@ class FacebookCareTool(ctk.CTk):
         if not hasattr(self, "ai_comment_enabled_var"):
             return
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
-        self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
-        api_key = self.ai_comment_api_key_entry.get().strip()
-        model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
-        base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
-        self.app_settings["ai_comment_model"] = model
-        self.app_settings["ai_comment_base_url"] = resolve_ai_chat_completions_url(
-            api_key=api_key,
-            model=model,
-            base_url=base_url,
-        )
+        self.app_settings.pop("ai_comment_api_key", None)
+        self.app_settings.pop("ai_comment_model", None)
+        self.app_settings.pop("ai_comment_base_url", None)
 
     def save_app_settings(self):
         self.save_comment_content(show_message=False)

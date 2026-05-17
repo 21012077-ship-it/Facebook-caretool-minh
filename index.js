@@ -2,7 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const { extractTextFromImages, generateComment, requireApiKey } = require('./aiCommenter');
+const { buildCommentPrompt, validateGeneratedComment } = require('./aiCommenter');
 
 const POST_FLAG = '--post';
 const DEFAULT_PROFILE_DIR = path.resolve(process.env.FB_PROFILE_DIR || 'fb_comment_profile');
@@ -13,7 +13,7 @@ function log(message) {
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nBiến môi trường bắt buộc:\n  OPENAI_API_KEY=...\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  OPENAI_COMMENT_MODEL=gpt-4o-mini\n  OPENAI_VISION_MODEL=gpt-4o-mini\n  FB_COMMENT_ENABLE_VISION=0  # tắt OCR bằng AI vision`);
+  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT`);
 }
 
 function parseArgs(argv) {
@@ -258,11 +258,10 @@ async function scrapePostContext(page) {
   try {
     imagePaths = await screenshotLikelyMedia(postElement);
     if (imagePaths.length && ENABLE_VISION) {
-      log(`Đang OCR chữ trong ${imagePaths.length} ảnh/thumbnail bằng AI vision...`);
-      visionText = await extractTextFromImages(imagePaths);
+      log(`Đã chụp ${imagePaths.length} ảnh/thumbnail để gửi kèm ChatGPT thủ công; không OCR bằng API.`);
     }
   } catch (error) {
-    log(`Không OCR được ảnh/thumbnail, tiếp tục bằng caption. Lý do: ${error.message}`);
+    log(`Không chụp/gửi được ảnh thumbnail, tiếp tục bằng dữ liệu chữ đã quét. Lý do: ${error.message}`);
   }
 
   const postData = {
@@ -277,11 +276,11 @@ async function scrapePostContext(page) {
   console.log(`Account: ${postData.accountName || '(không lấy được)'}`);
   console.log(`Post text: ${postData.postText || '(không lấy được)'}`);
   console.log(`Hashtags: ${postData.hashtags.join(', ') || '(không có)'}`);
-  console.log(`Image text: ${postData.imageText || '(không có)'}`);
+  console.log(`Image text: ${postData.imageText || (postData.imagePaths.length ? '(chưa OCR / sẽ gửi ảnh kèm ChatGPT)' : '(không có)')}`);
   console.log('========================');
 
   if (!postData.postText) {
-    log('⚠️ Không lấy được caption rõ ràng trong article chính. AI sẽ tự quyết định dựa trên phần còn lại.');
+    log('⚠️ Không lấy được caption rõ ràng trong article chính. ChatGPT sẽ tự quyết định dựa trên phần còn lại.');
   }
   return { postElement, postData };
 }
@@ -351,6 +350,128 @@ async function typeAndPost(page, postElement, comment) {
   log('✅ Đã đăng comment vào bài post thành công.');
 }
 
+
+async function findChatGPTComposer(page) {
+  const selectors = [
+    '#prompt-textarea',
+    'div[contenteditable="true"][id="prompt-textarea"]',
+    'div[contenteditable="true"][data-testid="prompt-textarea"]',
+    'textarea[data-testid="prompt-textarea"]',
+    'textarea[placeholder*="Message" i]',
+    'textarea[placeholder*="Nhắn" i]',
+    'div[contenteditable="true"]',
+  ];
+
+  for (const selector of selectors) {
+    const composer = page.locator(selector).last();
+    if (await composer.isVisible({ timeout: 2500 }).catch(() => false)) {
+      return composer;
+    }
+  }
+  throw new Error('Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập ChatGPT trong profile Chromium rồi chạy lại.');
+}
+
+async function ensureChatGPTLoggedIn(page) {
+  await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForLoadState('networkidle', { timeout: 25000 }).catch(() => null);
+  await page.waitForTimeout(3000);
+
+  const loginVisible = await page.locator('text=/log in|đăng nhập|sign up|đăng ký/i').first().isVisible({ timeout: 2000 }).catch(() => false);
+  const composerVisible = await page.locator('#prompt-textarea, textarea[data-testid="prompt-textarea"], div[contenteditable="true"]').last().isVisible({ timeout: 3000 }).catch(() => false);
+  if (loginVisible && !composerVisible) {
+    throw new Error(`Chromium profile chưa đăng nhập ChatGPT. Hãy mở profile ${DEFAULT_PROFILE_DIR}, đăng nhập https://chatgpt.com một lần để lưu cookie rồi chạy lại.`);
+  }
+}
+
+async function attachImagesToChatGPT(chatPage, imagePaths) {
+  if (!imagePaths.length) return;
+
+  const existingInputs = await chatPage.locator('input[type="file"]').count().catch(() => 0);
+  if (!existingInputs) {
+    const attachButton = chatPage.locator('[aria-label*="Attach" i], [aria-label*="Tải" i], [aria-label*="Đính" i], button:has-text("+")').first();
+    if (await attachButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await attachButton.click({ timeout: 3000 }).catch(() => null);
+      await chatPage.waitForTimeout(700);
+    }
+  }
+
+  const fileInput = chatPage.locator('input[type="file"]').last();
+  if (await fileInput.count().catch(() => 0)) {
+    await fileInput.setInputFiles(imagePaths, { timeout: 15000 });
+    log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
+    await chatPage.waitForTimeout(2500);
+  } else {
+    log('⚠️ Không tìm thấy nút/file input để đính kèm ảnh vào ChatGPT; prompt vẫn ghi rõ ảnh chưa OCR.');
+  }
+}
+
+async function submitChatGPTPrompt(chatPage, prompt) {
+  const composer = await findChatGPTComposer(chatPage);
+  await composer.click({ timeout: 10000 });
+  await humanDelay(300, 800);
+  await chatPage.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A').catch(() => null);
+  await chatPage.keyboard.insertText(prompt);
+  await humanDelay(500, 1200);
+
+  const sendButton = chatPage.locator('[data-testid="send-button"], button[aria-label*="Send" i], button[aria-label*="Gửi" i]').last();
+  if (await sendButton.isVisible({ timeout: 2500 }).catch(() => false)) {
+    await sendButton.click({ timeout: 10000 });
+  } else {
+    await chatPage.keyboard.press('Enter');
+  }
+}
+
+async function waitForChatGPTResponse(chatPage, beforeCount) {
+  log('⏳ Đang chờ ChatGPT trả comment trên web...');
+  const assistantSelector = '[data-message-author-role="assistant"], div.markdown.prose, .markdown';
+  await chatPage.waitForFunction(
+    ({ selector, count }) => document.querySelectorAll(selector).length > count,
+    { selector: assistantSelector, count: beforeCount },
+    { timeout: 180000 },
+  ).catch(() => null);
+
+  await chatPage.waitForFunction(() => {
+    const stopButton = document.querySelector('[data-testid="stop-button"], button[aria-label*="Stop" i], button[aria-label*="Dừng" i]');
+    return !stopButton;
+  }, null, { timeout: 180000 }).catch(() => null);
+  await chatPage.waitForTimeout(1500);
+
+  const responses = await chatPage.locator(assistantSelector).evaluateAll((nodes) => nodes.map((node) => (node.innerText || node.textContent || '').trim()).filter(Boolean));
+  return responses[responses.length - 1] || '';
+}
+
+async function generateCommentWithChatGPT(context, postData) {
+  const prompt = buildCommentPrompt(postData);
+  const chatPage = await context.newPage();
+  chatPage.setDefaultTimeout(20000);
+
+  try {
+    log('🧠 Mở ChatGPT thủ công trên máy bằng cookie/profile Chromium...');
+    await ensureChatGPTLoggedIn(chatPage);
+
+    const assistantSelector = '[data-message-author-role="assistant"], div.markdown.prose, .markdown';
+    const beforeCount = await chatPage.locator(assistantSelector).count().catch(() => 0);
+
+    await attachImagesToChatGPT(chatPage, postData.imagePaths || []);
+    log('📋 Đang paste prompt + dữ liệu bài viết đã quét vào ChatGPT...');
+    await submitChatGPTPrompt(chatPage, prompt);
+
+    const rawComment = await waitForChatGPTResponse(chatPage, beforeCount);
+    const validation = validateGeneratedComment(rawComment);
+    if (!validation.ok) {
+      if (validation.reason === 'skip') {
+        log('⚠️ ChatGPT trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài.');
+        return '';
+      }
+      log(`⚠️ Comment ChatGPT không hợp lệ (${validation.reason}): ${validation.comment || '(rỗng)'}`);
+      return '';
+    }
+    return validation.comment;
+  } finally {
+    await chatPage.close().catch(() => null);
+  }
+}
+
 async function main() {
   const parsed = parseArgs(process.argv);
   if (!parsed) return;
@@ -358,14 +479,6 @@ async function main() {
   const { url, shouldPost } = parsed;
   log(`Chế độ: ${shouldPost ? 'Auto-post' : 'Preview'}`);
   log(`Dùng Chromium profile cố định: ${DEFAULT_PROFILE_DIR}`);
-
-  try {
-    requireApiKey();
-  } catch (error) {
-    console.error(`❌ ${error.message}`);
-    process.exitCode = 1;
-    return;
-  }
 
   const context = await chromium.launchPersistentContext(DEFAULT_PROFILE_DIR, {
     channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || undefined,
@@ -395,31 +508,12 @@ async function main() {
 
     const { postElement, postData } = await scrapePostContext(page);
 
-    log('🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment...');
-    let comment;
-    try {
-      comment = await generateComment(postData);
-    } catch (error) {
-      if (error.code === 'SKIP_COMMENT') {
-        log('⚠️ AI trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài.');
-        return;
-      }
-      if (error.reason === 'empty') {
-        log('⚠️ AI trả về comment rỗng, bỏ qua bài.');
-        return;
-      }
-      if (error.reason === 'too_long') {
-        log('⚠️ Comment AI dài bất thường, bỏ qua bài.');
-        return;
-      }
-      if (error.reason === 'generic') {
-        log('Comment bị chặn vì quá chung chung');
-        return;
-      }
-      throw error;
+    const comment = await generateCommentWithChatGPT(context, postData);
+    if (!comment) {
+      return;
     }
 
-    console.log(`💬 Comment AI đề xuất: ${comment}`);
+    console.log(`💬 Comment ChatGPT đề xuất: ${comment}`);
 
     if (!shouldPost) {
       log('Preview mode: chỉ hiển thị comment để duyệt, không dán và không đăng.');

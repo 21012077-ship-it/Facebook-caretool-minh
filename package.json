@@ -2,7 +2,7 @@
   "name": "facebook-caretool-minh-commenter",
   "version": "0.1.0",
   "private": true,
-  "description": "CLI Playwright tự tạo và preview/đăng bình luận Facebook bằng AI.",
+  "description": "CLI Playwright preview/đăng bình luận Facebook bằng ChatGPT web thủ công, không gọi API.",
   "main": "index.js",
   "scripts": {
     "comment": "node index.js",

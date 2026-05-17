@@ -9,7 +9,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 - Quản lý danh sách account với trạng thái live/checkpoint/die, proxy, ghi chú và thời điểm tương tác.
 - Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng, hỗ trợ HTTP/HTTPS/SOCKS4/SOCKS5.
 - Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
-- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét đúng bài post chính và bắt buộc gọi AI tạo comment theo từng bài; nếu thiếu API key thì bỏ qua link, không sinh fallback.
+- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét đúng bài post chính, mở ChatGPT trên máy bằng cookie/profile trình duyệt, paste prompt đã lưu và lấy comment trả về; không gọi API ngoài và không sinh fallback bịa.
 
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
@@ -56,18 +56,18 @@ python -m playwright install chromium
 
 
 
-## AI comment trong app desktop
+## ChatGPT thủ công tạo comment trong app desktop
 
-Trong tab **Comment**, nếu muốn dùng AI thật để tự nghĩ comment theo từng bài:
+Trong tab **Comment**, nếu muốn tool tự nghĩ comment theo từng bài mà không gọi API ngoài:
 
-1. Vào **Cài đặt → AI tạo comment**, bật **Bật AI tự nghĩ comment theo bài viết**.
-2. Nhập API key OpenAI-compatible, model và endpoint chat completions, rồi bấm **Lưu cài đặt AI**. Có thể dùng biến môi trường `OPENAI_API_KEY` thay cho việc lưu key trong app. Nếu dùng Gemini (`gemini-*` hoặc key Gemini), tool sẽ tự chuyển sang endpoint OpenAI-compatible của Google: `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`.
-3. Ở màn **Comment**, bật **Tự tạo comment theo nội dung bài** và nên để trống ô **Nội dung Comment / Fallback** để chạy chế độ AI-only.
-4. Khi campaign chạy, log sẽ hiện model/key rút gọn nếu đang gọi AI thật; nếu chưa có key, log sẽ báo rõ “Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.”
+1. Đăng nhập `https://chatgpt.com` trong browser/profile mà tool đang mở để cookie được lưu sẵn.
+2. Vào **Cài đặt → ChatGPT thủ công tạo comment**, bật **Bật ChatGPT thủ công tự nghĩ comment theo bài viết**.
+3. Ở màn **Comment**, bật **Quét bài rồi tự nghĩ comment phù hợp** và nên để trống ô **Nội dung Comment / Fallback**.
+4. Khi campaign chạy, tool quét nội dung bài Facebook, ghi rõ phần chữ trong ảnh nếu chưa OCR, mở `chatgpt.com`, paste prompt + dữ liệu bài viết đã quét, chờ ChatGPT trả đúng 1 comment rồi dán lại vào Facebook.
 
-## CLI tự động tạo bình luận Facebook bằng AI
+## CLI tự động tạo bình luận Facebook bằng ChatGPT thủ công
 
-CLI Node.js mới hỗ trợ nhập link bài viết Facebook, mở Chromium bằng profile cố định để giữ đăng nhập, quét caption/media text nếu có, gọi AI tạo một bình luận Gen Z Việt Nam và mặc định chỉ preview.
+CLI Node.js hỗ trợ nhập link bài viết Facebook, mở Chromium bằng profile cố định để giữ đăng nhập Facebook và ChatGPT, quét caption/media text nếu có, gửi prompt qua `https://chatgpt.com` trên web rồi mặc định chỉ preview. Luồng này không dùng API key.
 
 Cài dependency Node:
 
@@ -75,11 +75,11 @@ Cài dependency Node:
 npm install
 ```
 
-Chuẩn bị API key:
+Chuẩn bị đăng nhập:
 
 ```bash
-export OPENAI_API_KEY="sk-..."              # OpenAI
-# hoặc dùng Gemini: export OPENAI_API_KEY="gen-lang..." / "AIza..." và OPENAI_COMMENT_MODEL="gemini-1.5-flash"
+# Chạy một lần để mở profile, đăng nhập Facebook và chatgpt.com trong cửa sổ Chromium, sau đó chạy lại link thật.
+node index.js "https://www.facebook.com/..."
 ```
 
 Chạy preview (mặc định, không tự đăng):
@@ -88,7 +88,7 @@ Chạy preview (mặc định, không tự đăng):
 node index.js "https://www.facebook.com/..."
 ```
 
-Tự đăng comment sau khi AI tạo nội dung:
+Tự đăng comment sau khi ChatGPT trả nội dung:
 
 ```bash
 node index.js "https://www.facebook.com/..." --post
@@ -96,9 +96,9 @@ node index.js "https://www.facebook.com/..." --post
 
 Ghi chú vận hành:
 
-- Chromium dùng profile cố định `fb_comment_profile/` (hoặc đặt `FB_PROFILE_DIR=/duong/dan/profile`) để giữ trạng thái đăng nhập Facebook.
-- Nếu profile chưa đăng nhập, tool sẽ dừng và báo đăng nhập trước.
-- Mặc định tool cố gắng OCR chữ trong ảnh/thumbnail bằng OpenAI vision từ screenshot media; có thể tắt bằng `FB_COMMENT_ENABLE_VISION=0`.
+- Chromium dùng profile cố định `fb_comment_profile/` (hoặc đặt `FB_PROFILE_DIR=/duong/dan/profile`) để giữ trạng thái đăng nhập Facebook và ChatGPT.
+- Nếu profile chưa đăng nhập Facebook hoặc ChatGPT, tool sẽ dừng và báo đăng nhập trước.
+- Tool chụp ảnh/thumbnail có kích thước phù hợp để đính kèm vào ChatGPT; nếu không lấy được chữ trong ảnh thì prompt/log ghi rõ chưa OCR. Có thể tắt bước chụp/gửi ảnh bằng `FB_COMMENT_ENABLE_VISION=0`.
 - Không có flag `--post` thì tool chỉ in comment ở chế độ preview, không dán và không tự bấm đăng.
 
 ## Chạy ứng dụng

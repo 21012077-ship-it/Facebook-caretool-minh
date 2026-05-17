@@ -9,6 +9,7 @@ from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
 from facebook_caretool.utils import (
+    build_ai_comment_prompt,
     build_comment_payloads,
     build_contextual_facebook_comment,
     detect_facebook_post_category,
@@ -16,8 +17,6 @@ from facebook_caretool.utils import (
     generate_totp_code,
     is_facebook_standard_comment,
     load_json,
-    normalize_ai_chat_completions_url,
-    resolve_ai_chat_completions_url,
     parse_delay,
     parse_proxy,
     save_json,
@@ -128,157 +127,24 @@ class UtilsTest(unittest.TestCase):
     def test_validate_ai_comment_accepts_short_natural_reactions(self):
         self.assertEqual(validate_ai_comment("căng thế"), (True, ""))
 
-    def test_generate_ai_facebook_comment_normalizes_v1_base_url_and_skip(self):
-        class FakeResponse:
-            def read(self):
-                return b'{"choices":[{"message":{"content":"SKIP_COMMENT"}}]}'
+    def test_build_ai_comment_prompt_contains_manual_chatgpt_context(self):
+        prompt = build_ai_comment_prompt("Page A\nCaption có #hashtag\nImage text: (desktop chưa OCR riêng)")
 
-            def close(self):
-                pass
+        self.assertIn("Dữ liệu bài viết", prompt)
+        self.assertIn("Caption có #hashtag", prompt)
+        self.assertIn("SKIP_COMMENT", prompt)
 
-        captured = {}
+    def test_generate_ai_facebook_comment_api_flow_is_disabled(self):
+        def requester(*_args, **_kwargs):
+            raise AssertionError("Không được gọi API/requester trong luồng ChatGPT thủ công")
 
-        def requester(request, timeout):
-            captured["url"] = request.full_url
-            return FakeResponse()
-
-        self.assertEqual(
+        with self.assertRaisesRegex(ValueError, "Đã tắt hoàn toàn gọi API"):
             generate_ai_facebook_comment(
-                "Bài viết không rõ nội dung",
+                "Bài viết hữu ích",
                 api_key="test-key",
-                base_url="https://api.openai.com/v1",
                 requester=requester,
-            ),
-            "SKIP_COMMENT",
-        )
-        self.assertEqual(captured["url"], "https://api.openai.com/v1/chat/completions")
-        self.assertEqual(
-            normalize_ai_chat_completions_url("https://example.com/v1/chat/completions/"),
-            "https://example.com/v1/chat/completions",
-        )
-
-
-    def test_resolve_ai_chat_completions_url_routes_gemini_model_to_google(self):
-        self.assertEqual(
-            resolve_ai_chat_completions_url(
-                api_key="gen-lang-example",
-                model="gemini-1.5-flash",
-                base_url="https://api.openai.com/v1/chat/completions",
-            ),
-            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        )
-        self.assertEqual(
-            resolve_ai_chat_completions_url(
-                api_key="test-key",
-                model="gemini-1.5-flash",
-                base_url="https://api.openai.com/v1",
-            ),
-            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        )
-
-    def test_generate_ai_facebook_comment_uses_gemini_openai_endpoint(self):
-        class FakeResponse:
-            def read(self):
-                return b'{"choices":[{"message":{"content":"Cam on ban da chia se thong tin that su huu ich."}}]}'
-
-            def close(self):
-                pass
-
-        captured = {}
-
-        def requester(request, timeout):
-            captured["url"] = request.full_url
-            captured["auth"] = request.headers.get("Authorization")
-            captured["google_key"] = request.headers.get("X-goog-api-key")
-            return FakeResponse()
-
-        comment = generate_ai_facebook_comment(
-            "Bài viết chia sẻ thông tin hữu ích.",
-            api_key="gen-lang-example",
-            model="gemini-1.5-flash",
-            base_url="https://api.openai.com/v1/chat/completions",
-            requester=requester,
-        )
-
-        self.assertEqual(comment, "Cam on ban da chia se thong tin that su huu ich.")
-        self.assertEqual(
-            captured["url"],
-            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-        )
-        self.assertEqual(captured["auth"], "Bearer gen-lang-example")
-        self.assertEqual(captured["google_key"], "gen-lang-example")
-
-    def test_generate_ai_facebook_comment_requires_configuration(self):
-        with self.assertRaises(ValueError):
-            generate_ai_facebook_comment("Bài viết hữu ích", api_key="")
-
-    def test_generate_ai_facebook_comment_uses_openai_compatible_response(self):
-        class FakeResponse:
-            def __init__(self, payload):
-                self.payload = payload
-                self.closed = False
-
-            def read(self):
-                return self.payload.encode("utf-8")
-
-            def close(self):
-                self.closed = True
-
-        captured = {}
-
-        def requester(request, timeout):
-            captured["url"] = request.full_url
-            captured["timeout"] = timeout
-            captured["body"] = request.data.decode("utf-8")
-            captured["auth"] = request.headers.get("Authorization")
-            return FakeResponse('{"choices":[{"message":{"content":"Cảm ơn bạn đã chia sẻ góc nhìn rất hữu ích."}}]}')
-
-        comment = generate_ai_facebook_comment(
-            "Bài viết chia sẻ kinh nghiệm chăm sóc tài khoản.",
-            api_key="test-key",
-            model="test-model",
-            base_url="https://example.com/v1/chat/completions",
-            requester=requester,
-        )
-
-        self.assertEqual(comment, "Cảm ơn bạn đã chia sẻ góc nhìn rất hữu ích.")
-        self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
-        self.assertEqual(captured["auth"], "Bearer test-key")
-        self.assertIn('"model": "test-model"', captured["body"])
-        self.assertIn("một câu hoàn chỉnh từ 7 đến 25 từ", captured["body"])
-
-
-    def test_generate_ai_facebook_comment_rejects_too_short_ai_output(self):
-        class FakeResponse:
-            def read(self):
-                return b'{"choices":[{"message":{"content":"cang the"}}]}'
-
-            def close(self):
-                pass
-
-        self.assertIsNone(
-            generate_ai_facebook_comment(
-                "Bài viết có nội dung rõ nhưng AI trả lời quá ngắn.",
-                api_key="test-key",
-                requester=lambda request, timeout: FakeResponse(),
             )
-        )
 
-    def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
-        class FakeResponse:
-            def read(self):
-                return b'{"choices":[{"message":{"content":"Inbox ngay https://example.com de chot don"}}]}'
-
-            def close(self):
-                pass
-
-        self.assertIsNone(
-            generate_ai_facebook_comment(
-                "Bài viết bất kỳ",
-                api_key="test-key",
-                requester=lambda request, timeout: FakeResponse(),
-            )
-        )
 
     def test_generate_totp_code_uses_rfc6238_vector(self):
         secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
