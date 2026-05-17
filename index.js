@@ -380,11 +380,47 @@ async function findFirstVisibleComment(postElement) {
   return null;
 }
 
+const REPLY_ACTION_LABELS = ['Phản hồi', 'Reply', 'Trả lời'];
+
+function buildReplyActionSelectors() {
+  return REPLY_ACTION_LABELS.flatMap((label) => [
+    `div[role="button"][aria-label*="${label}" i]`,
+    `span[role="button"][aria-label*="${label}" i]`,
+    `div[role="button"]:has-text("${label}")`,
+    `span:has-text("${label}")`,
+    `text=${label}`,
+  ]);
+}
+
+async function clickReplyLocator(locator) {
+  await locator.scrollIntoViewIfNeeded().catch(() => null);
+  await locator.hover({ timeout: 3000 }).catch(() => null);
+  await humanDelay(500, 1200);
+
+  try {
+    await locator.click({ timeout: 5000 });
+    return true;
+  } catch (error) {
+    log(`⚠️ Click Reply thường thất bại, thử click phần tử cha. Lý do: ${error.message}`);
+  }
+
+  const clickedAncestor = await locator.evaluate((node) => {
+    const target = node.closest('[role="button"], a, [tabindex], [aria-label]') || node;
+    target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    target.click();
+    return true;
+  }).catch(() => false);
+  if (clickedAncestor) return true;
+
+  await locator.click({ timeout: 5000, force: true });
+  return true;
+}
+
 async function clickReplyTarget(page, postElement, target) {
   if (target.button) {
-    await target.button.scrollIntoViewIfNeeded().catch(() => null);
-    await humanDelay(500, 1200);
-    await target.button.click({ timeout: 5000 });
+    await clickReplyLocator(target.button);
     return;
   }
 
@@ -397,19 +433,12 @@ async function clickReplyTarget(page, postElement, target) {
   await target.container.hover({ timeout: 3000 }).catch(() => null);
   await page.waitForTimeout(700);
 
-  const replySelectors = [
-    'div[role="button"]:has-text("Phản hồi")',
-    'div[role="button"]:has-text("Reply")',
-    'span:has-text("Phản hồi")',
-    'span:has-text("Reply")',
-    'text=Phản hồi',
-    'text=Reply',
-  ];
+  const replySelectors = buildReplyActionSelectors();
 
   for (const selector of replySelectors) {
     const button = target.container.locator(selector).first();
     if (await button.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await button.click({ timeout: 5000 });
+      await clickReplyLocator(button);
       return;
     }
   }
@@ -417,23 +446,16 @@ async function clickReplyTarget(page, postElement, target) {
   for (const selector of replySelectors) {
     const button = postElement.locator(selector).first();
     if (await button.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await button.click({ timeout: 5000 });
+      await clickReplyLocator(button);
       return;
     }
   }
 
-  throw new Error('Đã tìm thấy comment đầu tiên nhưng không hiện nút Phản hồi/Reply để bấm.');
+  throw new Error('Đã tìm thấy comment đầu tiên nhưng không hiện nút Phản hồi/Reply/Trả lời để bấm.');
 }
 
 async function findReplyTargetComment(postElement) {
-  const selectors = [
-    'div[role="button"]:has-text("Phản hồi")',
-    'div[role="button"]:has-text("Reply")',
-    'span:has-text("Phản hồi")',
-    'span:has-text("Reply")',
-    'text=Phản hồi',
-    'text=Reply',
-  ];
+  const selectors = buildReplyActionSelectors();
   const seen = new Set();
   const candidates = [];
 
