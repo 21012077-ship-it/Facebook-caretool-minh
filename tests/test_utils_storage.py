@@ -123,6 +123,16 @@ class UtilsTest(unittest.TestCase):
         self.assertNotIn("Số thông báo", comment)
         self.assertNotIn("Facebook Pham Gia", comment)
 
+    def test_build_contextual_facebook_comment_ignores_sidebar_menu_noise(self):
+        comment = build_contextual_facebook_comment(
+            "Menu trên Facebook Minh Pán Netfix Meta AI Bạn bè Công cụ chuyên nghiệp Kỷ niệm Đã lưu Nhóm Thước phim Marketplace Bảng feed",
+            "Mình thấy nội dung này khá hữu ích và thực tế.",
+        )
+
+        self.assertEqual(comment, "Mình thấy nội dung này khá hữu ích và thực tế.")
+        self.assertNotIn("Meta AI", comment)
+        self.assertNotIn("Marketplace", comment)
+
     def test_is_facebook_standard_comment_rejects_spam_signals(self):
         self.assertFalse(is_facebook_standard_comment("Inbox ngay https://example.com để chốt đơn!!!"))
 

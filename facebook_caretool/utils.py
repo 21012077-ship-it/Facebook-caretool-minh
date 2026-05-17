@@ -178,7 +178,9 @@ FACEBOOK_UI_NOISE_PATTERNS = [
     r"\b(?:xem thêm|see more|ẩn bớt|view more|follow|theo dõi)\b",
     r"\b(?:giờ|phút|ngày|tuần)\s*(?:trước)?\b",
     r"\bsố\s+thông\s+báo\s+chưa\s+đọc\b",
-    r"\b(?:menu|facebook|messenger|watch|reels|trang chủ|home)\b",
+    r"\b(?:meta\s+ai|bạn\s+bè|friends|công\s+cụ\s+chuyên\s+nghiệp|professional\s+dashboard)\b",
+    r"\b(?:kỷ\s+niệm|memories|đã\s+lưu|saved|nhóm|groups|thước\s+phim|marketplace|bảng\s+feed|bảng|feed|netflix|netfix)\b",
+    r"\b(?:menu|facebook|messenger|watch|reels|trang chủ|home|thông báo|notifications)\b",
 ]
 
 VIETNAMESE_TOPIC_STOPWORDS = {

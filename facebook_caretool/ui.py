@@ -895,16 +895,79 @@ class FacebookCareTool(ctk.CTk):
                 r"""
                 () => {
                     const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-                    const roots = [
-                        document.querySelector('div[role="article"]'),
-                        document.querySelector('div[role="main"]'),
-                        document.body,
-                    ].filter(Boolean);
-                    const candidates = roots
-                        .map((root) => normalize(root.innerText || root.textContent || ''))
-                        .filter(Boolean);
-                    candidates.sort((a, b) => b.length - a.length);
-                    return (candidates[0] || '').slice(0, 500);
+                    const uiNoise = /(menu|facebook|meta ai|messenger|watch|reels|marketplace|bạn bè|friends|nhóm|groups|thước phim|saved|đã lưu|kỷ niệm|memories|công cụ chuyên nghiệp|professional dashboard|bảng feed|feed|trang chủ|home|thông báo|notifications)/i;
+                    const actionNoise = /^(thích|like|bình luận|comment|chia sẻ|share|phản hồi|reply|xem thêm|see more)$/i;
+                    const isVisible = (element) => {
+                        const rect = element.getBoundingClientRect();
+                        const style = window.getComputedStyle(element);
+                        return rect.width > 20 && rect.height > 20 && style.visibility !== 'hidden' && style.display !== 'none';
+                    };
+                    const isChromeNode = (node) => Boolean(node.closest([
+                        'div[role="banner"]',
+                        'div[role="navigation"]',
+                        'div[role="complementary"]',
+                        'div[aria-label*="Menu" i]',
+                        'div[aria-label*="Facebook" i]',
+                        'nav',
+                        'header',
+                    ].join(',')));
+                    const collectReadableText = (root) => {
+                        const lines = [];
+                        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+                            acceptNode: (node) => {
+                                if (!(node instanceof HTMLElement) || !isVisible(node) || isChromeNode(node)) {
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                                const role = (node.getAttribute('role') || '').toLowerCase();
+                                const aria = normalize(node.getAttribute('aria-label') || '');
+                                if (['button', 'menuitem', 'navigation', 'banner', 'complementary'].includes(role)) {
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                                if (aria && (actionNoise.test(aria) || uiNoise.test(aria))) {
+                                    return NodeFilter.FILTER_REJECT;
+                                }
+                                return NodeFilter.FILTER_ACCEPT;
+                            },
+                        });
+                        while (walker.nextNode()) {
+                            const node = walker.currentNode;
+                            const ownText = Array.from(node.childNodes)
+                                .filter((child) => child.nodeType === Node.TEXT_NODE)
+                                .map((child) => normalize(child.textContent || ''))
+                                .filter(Boolean)
+                                .join(' ');
+                            if (!ownText || actionNoise.test(ownText) || uiNoise.test(ownText)) {
+                                continue;
+                            }
+                            if (!lines.includes(ownText)) {
+                                lines.push(ownText);
+                            }
+                        }
+                        return normalize(lines.join('\n'));
+                    };
+                    const scoreText = (text, rect) => {
+                        const words = (text.match(/[A-Za-zÀ-ỹ0-9]+/g) || []).length;
+                        const uiHits = (text.match(uiNoise) || []).length;
+                        const usefulPunctuation = (text.match(/[?!…#]/g) || []).length;
+                        const viewportBonus = rect && rect.top > -200 && rect.top < window.innerHeight + 200 ? 80 : 0;
+                        return words * 8 + usefulPunctuation * 12 + viewportBonus - uiHits * 120;
+                    };
+                    const articleRoots = Array.from(document.querySelectorAll('div[role="article"]')).filter(isVisible);
+                    const candidates = articleRoots.map((root) => {
+                        const rect = root.getBoundingClientRect();
+                        const text = collectReadableText(root);
+                        return { text, score: scoreText(text, rect), top: Math.abs(rect.top) };
+                    }).filter((candidate) => candidate.text.length >= 15);
+
+                    if (!candidates.length) {
+                        const main = document.querySelector('div[role="main"]');
+                        if (main && isVisible(main)) {
+                            candidates.push({ text: collectReadableText(main), score: 0, top: 0 });
+                        }
+                    }
+
+                    candidates.sort((a, b) => (b.score - a.score) || (a.top - b.top));
+                    return (candidates[0]?.text || '').slice(0, 800);
                 }
                 """
             )
