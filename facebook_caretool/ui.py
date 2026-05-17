@@ -67,7 +67,7 @@ class FacebookCareTool(ctk.CTk):
             "comment_content": DEFAULT_COMMENT_CONTENT,
             "ai_comment_enabled": True,
             "ai_comment_base_url": "https://api.openai.com/v1/chat/completions",
-            "ai_comment_model": "gpt-4o-mini",
+            "ai_comment_model": "gemini-1.5-flash",
             "ai_comment_api_key": "",
         })
         self.comment_content_save_job = None
@@ -683,7 +683,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="Model", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
         self.ai_comment_model_entry = ctk.CTkEntry(ai_frame)
         self.ai_comment_model_entry.pack(fill="x", padx=18, pady=(4, 8))
-        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gpt-4o-mini"))
+        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gemini-1.5-flash"))
         ctk.CTkLabel(ai_frame, text="Base URL Chat Completions", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
         self.ai_comment_base_url_entry = ctk.CTkEntry(ai_frame)
         self.ai_comment_base_url_entry.pack(fill="x", padx=18, pady=(4, 12))
@@ -899,84 +899,88 @@ class FacebookCareTool(ctk.CTk):
             if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
                 return None
 
+        # --- LOGIC QUÉT BÀI MỚI: ÉP BUỘC ĐỌC TRONG POPUP ---
         try:
             scanned_text = page.evaluate(
                 r"""
                 () => {
-                    const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-                    const uiNoise = /(menu|facebook|meta ai|messenger|watch|reels|marketplace|bạn bè|friends|nhóm|groups|thước phim|saved|đã lưu|kỷ niệm|memories|công cụ chuyên nghiệp|professional dashboard|bảng feed|feed|trang chủ|home|thông báo|notifications)/i;
-                    const actionNoise = /^(thích|like|bình luận|comment|chia sẻ|share|phản hồi|reply|xem thêm|see more)$/i;
                     const isVisible = (element) => {
+                        if (!element) return false;
                         const rect = element.getBoundingClientRect();
                         const style = window.getComputedStyle(element);
-                        return rect.width > 20 && rect.height > 20 && style.visibility !== 'hidden' && style.display !== 'none';
+                        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.opacity !== '0';
                     };
-                    const isChromeNode = (node) => Boolean(node.closest([
-                        'div[role="banner"]',
-                        'div[role="navigation"]',
-                        'div[role="complementary"]',
-                        'div[aria-label*="Menu" i]',
-                        'div[aria-label*="Facebook" i]',
-                        'nav',
-                        'header',
-                    ].join(',')));
-                    const collectReadableText = (root) => {
-                        const lines = [];
-                        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
-                            acceptNode: (node) => {
-                                if (!(node instanceof HTMLElement) || !isVisible(node) || isChromeNode(node)) {
-                                    return NodeFilter.FILTER_REJECT;
-                                }
-                                const role = (node.getAttribute('role') || '').toLowerCase();
-                                const aria = normalize(node.getAttribute('aria-label') || '');
-                                if (['button', 'menuitem', 'navigation', 'banner', 'complementary'].includes(role)) {
-                                    return NodeFilter.FILTER_REJECT;
-                                }
-                                if (aria && (actionNoise.test(aria) || uiNoise.test(aria))) {
-                                    return NodeFilter.FILTER_REJECT;
-                                }
-                                return NodeFilter.FILTER_ACCEPT;
-                            },
-                        });
-                        while (walker.nextNode()) {
-                            const node = walker.currentNode;
-                            const ownText = Array.from(node.childNodes)
-                                .filter((child) => child.nodeType === Node.TEXT_NODE)
-                                .map((child) => normalize(child.textContent || ''))
-                                .filter(Boolean)
-                                .join(' ');
-                            if (!ownText || actionNoise.test(ownText) || uiNoise.test(ownText)) {
-                                continue;
-                            }
-                            if (!lines.includes(ownText)) {
-                                lines.push(ownText);
-                            }
-                        }
-                        return normalize(lines.join('\n'));
-                    };
-                    const scoreText = (text, rect) => {
-                        const words = (text.match(/[A-Za-zÀ-ỹ0-9]+/g) || []).length;
-                        const uiHits = (text.match(uiNoise) || []).length;
-                        const usefulPunctuation = (text.match(/[?!…#]/g) || []).length;
-                        const viewportBonus = rect && rect.top > -200 && rect.top < window.innerHeight + 200 ? 80 : 0;
-                        return words * 8 + usefulPunctuation * 12 + viewportBonus - uiHits * 120;
-                    };
-                    const articleRoots = Array.from(document.querySelectorAll('div[role="article"]')).filter(isVisible);
-                    const candidates = articleRoots.map((root) => {
-                        const rect = root.getBoundingClientRect();
-                        const text = collectReadableText(root);
-                        return { text, score: scoreText(text, rect), top: Math.abs(rect.top) };
-                    }).filter((candidate) => candidate.text.length >= 15);
 
-                    if (!candidates.length) {
-                        const main = document.querySelector('div[role="main"]');
-                        if (main && isVisible(main)) {
-                            candidates.push({ text: collectReadableText(main), score: 0, top: 0 });
+                    // 1. KHOANH VÙNG: Bắt buộc tìm Popup (Dialog) trước tiên
+                    let mainContainer = document.body;
+                    const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]')).filter(isVisible);
+                    
+                    if (dialogs.length > 0) {
+                        mainContainer = dialogs[dialogs.length - 1]; // Lấy Popup trên cùng, ngắt kết nối hoàn toàn với bên ngoài
+                    } else {
+                        // Nếu không có Popup, tìm bài viết ở gần giữa màn hình nhất
+                        const articles = Array.from(document.querySelectorAll('div[role="article"]')).filter(isVisible);
+                        if (articles.length > 0) {
+                            articles.sort((a, b) => {
+                                const rectA = a.getBoundingClientRect();
+                                const rectB = b.getBoundingClientRect();
+                                return Math.abs(rectA.top) - Math.abs(rectB.top);
+                            });
+                            mainContainer = articles[0];
                         }
                     }
 
-                    candidates.sort((a, b) => (b.score - a.score) || (a.top - b.top));
-                    return (candidates[0]?.text || '').slice(0, 800);
+                    let postText = "";
+                    
+                    // 2. TRÍCH XUẤT: Tìm các thẻ chứa chữ chuẩn của Facebook
+                    const messageDiv = mainContainer.querySelector('div[data-ad-preview="message"]');
+                    if (messageDiv) {
+                        postText = messageDiv.innerText || messageDiv.textContent;
+                    } 
+                    
+                    // Nếu vẫn không thấy (thường gặp ở bài nền màu), tìm các thẻ text tự động
+                    if (!postText || postText.trim().length < 5) {
+                        const autoTexts = Array.from(mainContainer.querySelectorAll('div[dir="auto"], span[dir="auto"]'))
+                            .filter(el => {
+                                if (!isVisible(el)) return false;
+                                // Lọc bỏ tên người đăng, các nút bấm rác
+                                if (el.closest('a') || el.closest('h1') || el.closest('h2') || el.closest('h3') || el.closest('[role="button"]')) return false;
+                                
+                                const text = (el.innerText || '').trim();
+                                const noise = /^(thích|like|bình luận|comment|chia sẻ|share|phản hồi|reply|xem thêm|see more|ẩn bớt)$/i;
+                                if (noise.test(text) || text.length < 5) return false;
+                                return true;
+                            });
+
+                        if (autoTexts.length > 0) {
+                            // Lấy khối chữ dài nhất làm nội dung chính
+                            autoTexts.sort((a, b) => (b.innerText || '').length - (a.innerText || '').length);
+                            postText = autoTexts[0].innerText || autoTexts[0].textContent;
+                        }
+                    }
+
+                    // 3. FALLBACK CUỐI CÙNG: Gom cào tất cả chữ có trong vùng khoanh
+                    if (!postText || postText.trim().length < 5) {
+                        const walker = document.createTreeWalker(mainContainer, NodeFilter.SHOW_TEXT, {
+                            acceptNode: (node) => {
+                                const parent = node.parentElement;
+                                if (!parent || !isVisible(parent)) return NodeFilter.FILTER_REJECT;
+                                if (parent.tagName === 'A' || parent.closest('[role="button"]')) return NodeFilter.FILTER_REJECT;
+                                return NodeFilter.FILTER_ACCEPT;
+                            }
+                        });
+                        
+                        let allText = [];
+                        while (walker.nextNode()) {
+                            const txt = walker.currentNode.nodeValue.trim();
+                            if (txt.length > 5) allText.push(txt);
+                        }
+                        postText = allText.join('\n');
+                    }
+
+                    // Dọn dẹp rác giao diện nếu bị lọt vào
+                    postText = (postText || '').replace(/(Thích|Bình luận|Chia sẻ|Phản hồi|Xem thêm|Ẩn bớt)/ig, ' ');
+                    return postText.replace(/\s+/g, ' ').trim().slice(0, 1000);
                 }
                 """
             )
@@ -1359,7 +1363,7 @@ class FacebookCareTool(ctk.CTk):
         """
         enabled = bool(self.app_settings.get("ai_comment_enabled", True))
         api_key = self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
-        model = self.app_settings.get("ai_comment_model", "gpt-4o-mini")
+        model = self.app_settings.get("ai_comment_model", "gemini-1.5-flash")
         base_url = self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions")
 
         if hasattr(self, "ai_comment_enabled_var"):
@@ -1367,7 +1371,7 @@ class FacebookCareTool(ctk.CTk):
         if hasattr(self, "ai_comment_api_key_entry"):
             api_key = self.ai_comment_api_key_entry.get().strip() or os.environ.get("OPENAI_API_KEY", "")
         if hasattr(self, "ai_comment_model_entry"):
-            model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+            model = self.ai_comment_model_entry.get().strip() or "gemini-1.5-flash"
         if hasattr(self, "ai_comment_base_url_entry"):
             base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
         base_url = normalize_ai_chat_completions_url(base_url)
@@ -1394,7 +1398,7 @@ class FacebookCareTool(ctk.CTk):
                 scanned_post_text,
                 "",
                 api_key=ai_comment_settings.get("api_key", ""),
-                model=ai_comment_settings.get("model", "gpt-4o-mini"),
+                model=ai_comment_settings.get("model", "gemini-1.5-flash"),
                 base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
             )
         except ValueError as exc:
@@ -1793,7 +1797,7 @@ class FacebookCareTool(ctk.CTk):
             return
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
         self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
-        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gemini-1.5-flash"
         self.app_settings["ai_comment_base_url"] = normalize_ai_chat_completions_url(
             self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
         )

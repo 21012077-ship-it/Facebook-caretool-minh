@@ -366,14 +366,15 @@ Phong cách bình luận mong muốn:
 - Không nghị luận dài dòng
 
 Yêu cầu bắt buộc:
-- Chỉ trả về đúng 1 comment duy nhất
-- Không giải thích
-- Không thêm dấu ngoặc kép
-- Không thêm tiền tố như “Comment:”
-- Độ dài ưu tiên khoảng 4 đến 16 từ
-- Có thể dài hơn một chút nếu thật sự cần, nhưng không được lan man
+- Chỉ viết 1 comment duy nhất
+- Bắt buộc độ dài: Phải viết thành một câu hoàn chỉnh từ 7 đến 25 từ. Tuyệt đối không bình luận cụt lủn 1, 2 chữ.
+- Bám sát nội dung cụ thể của bài, không viết kiểu chung chung như “hay quá”, “đỉnh thật”, “xịn nha”
 - Không lặp lại nguyên văn caption
-- Không viết comment chung chung không liên quan
+- Không giải thích, không thêm dấu ngoặc kép
+- Không cố nhồi trend nếu không hợp ngữ cảnh
+- Không câu nào cũng phải có emoji
+- Nếu dùng emoji thì chỉ 0–1 emoji là đủ
+- Trả về SKIP_COMMENT nếu không có nội dung rõ ràng để bình luận.
 - Không dùng kiểu giọng AI như:
   + "mình nghĩ nên nhìn theo từng tình huống thực tế"
   + "mỗi người có thể có một góc nhìn khác nhau"
@@ -462,64 +463,83 @@ def normalize_ai_chat_completions_url(base_url: str | None) -> str:
         return f"{normalized}/chat/completions"
     return normalized
 
-
 def generate_ai_facebook_comment(
     post_text: str | None,
     fallback_comment: str = "",
     *,
     api_key: str = "",
-    model: str = "gpt-4o-mini",
-    base_url: str = "https://api.openai.com/v1/chat/completions",
+    model: str = "gemini-1.5-flash",
+    base_url: str = "", 
     temperature: float = 0.9,
     timeout: float = 25,
     requester: Any = None,
 ) -> str | None:
-    """Gọi AI thật để tạo comment theo nội dung bài viết; không có fallback tự bịa."""
+    """Gọi Gemini AI, sử dụng SDK mới nhất (google-genai) kèm cơ chế hiện lỗi chi tiết."""
+    from google import genai
+    from google.genai import types
+    import time
+    import random
+    
     normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
-    if not api_key.strip():
-        raise ValueError("Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.")
-    normalized_base_url = normalize_ai_chat_completions_url(base_url)
-    if not model.strip() or not normalized_base_url:
-        raise ValueError("Thiếu cấu hình model/base_url AI, bỏ qua link vì không thể tạo comment bằng AI.")
+    
+    keys = [k.strip() for k in api_key.split(",") if k.strip()]
+    if not keys:
+        raise ValueError("Thiếu API KEY của Gemini, không thể tạo comment.")
+    random.shuffle(keys)
 
-    payload = {
-        "model": model.strip(),
-        "temperature": max(0.0, min(float(temperature), 1.5)),
-        "max_tokens": 90,
-        "messages": [
-            {"role": "system", "content": AI_COMMENT_SYSTEM_PROMPT},
-            {"role": "user", "content": build_ai_comment_prompt(normalized_post)},
-        ],
-    }
-    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(
-        normalized_base_url,
-        data=data,
-        headers={
-            "Authorization": f"Bearer {api_key.strip()}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    full_prompt = f"{AI_COMMENT_SYSTEM_PROMPT}\n\n{build_ai_comment_prompt(normalized_post)}"
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    
+    candidate = None
+    last_error_msg = "Không rõ nguyên nhân (Chưa gọi được API)"
+    
+    for current_key in keys:
+        client = genai.Client(api_key=current_key)
+        
+        for m_name in models_to_try:
+            retries = 2
+            for attempt in range(retries):
+                try:
+                    response = client.models.generate_content(
+                        model=m_name,
+                        contents=full_prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=max(0.0, min(float(temperature), 1.0)),
+                            max_output_tokens=90,
+                        )
+                    )
+                    
+                    if response.text:
+                        candidate = normalize_comment_text(response.text.strip().strip('"“”'))
+                        break 
+                        
+                except Exception as exc:
+                    # Ghi nhận lại lỗi thật sự từ Google
+                    last_error_msg = str(exc)
+                    error_str = last_error_msg.lower()
+                    
+                    # Bắn log thẳng ra cửa sổ cmd/terminal để debug
+                    print(f"⚠️ [DEBUG] Lỗi ở Model {m_name}, Key đuôi {current_key[-4:]}: {last_error_msg}")
+                    
+                    if "429" in error_str or "quota" in error_str:
+                        if attempt < retries - 1:
+                            time.sleep(8)
+                            continue
+                        else:
+                            break
+                    elif "404" in error_str or "not found" in error_str:
+                        break
+                    else:
+                        break 
+            
+            if candidate:
+                break
+        if candidate:
+            break
 
-    try:
-        response = requester(request, timeout=timeout) if requester else urllib.request.urlopen(request, timeout=timeout)
-        try:
-            raw_response = response.read().decode("utf-8")
-        finally:
-            close = getattr(response, "close", None)
-            if close:
-                close()
-        candidate = extract_ai_comment_text(json.loads(raw_response))
-    except urllib.error.HTTPError as exc:
-        detail = ""
-        try:
-            detail = exc.read().decode("utf-8", errors="replace")[:300]
-        except Exception:
-            detail = str(exc)
-        raise ValueError(f"OpenAI API lỗi {exc.code}: {detail or exc.reason}") from exc
-    except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError, TypeError) as exc:
-        raise ValueError(f"Không gọi được AI tạo comment: {exc}") from exc
+    if candidate is None:
+        # Ép tool in ra đúng cái lỗi cuối cùng mà Google chửi mình
+        raise ValueError(f"❌ Chi tiết lỗi từ Google: {last_error_msg[:150]}")
 
     is_valid, reason = validate_ai_comment(candidate)
     if is_valid:
@@ -527,7 +547,6 @@ def generate_ai_facebook_comment(
     if reason == "skip":
         return "SKIP_COMMENT"
     return None
-
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.
