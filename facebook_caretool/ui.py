@@ -10,7 +10,16 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import build_comment_payloads, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, spin_content
+from .utils import (
+    build_comment_payloads,
+    generate_ai_facebook_comment,
+    generate_totp_code,
+    load_json,
+    normalize_ai_chat_completions_url,
+    random_delay,
+    save_json,
+    spin_content,
+)
 import json
 import os
 import threading
@@ -1361,6 +1370,7 @@ class FacebookCareTool(ctk.CTk):
             model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
         if hasattr(self, "ai_comment_base_url_entry"):
             base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+        base_url = normalize_ai_chat_completions_url(base_url)
 
         return {
             "enabled": enabled,
@@ -1376,6 +1386,8 @@ class FacebookCareTool(ctk.CTk):
         if not ai_comment_settings.get("api_key"):
             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."))
             return None
+
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment..."))
 
         try:
             ai_comment = generate_ai_facebook_comment(
@@ -1393,7 +1405,6 @@ class FacebookCareTool(ctk.CTk):
             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài."))
             return None
         if ai_comment:
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment..."))
             return ai_comment
 
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, bỏ qua bài."))
@@ -1783,7 +1794,7 @@ class FacebookCareTool(ctk.CTk):
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
         self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
         self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
-        self.app_settings["ai_comment_base_url"] = (
+        self.app_settings["ai_comment_base_url"] = normalize_ai_chat_completions_url(
             self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
         )
 
