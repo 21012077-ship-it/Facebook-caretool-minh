@@ -17,6 +17,13 @@ function compactText(value, maxLength = 3000) {
     .slice(0, maxLength);
 }
 
+function buildPostContextLines(postData) {
+  return `- Page/account name: ${compactText(postData.accountName, 500) || '(không lấy được)'}
+- Post text: ${compactText(postData.postText, 3500) || '(không lấy được)'}
+- Hashtags: ${(postData.hashtags || []).join(', ') || '(không có)'}
+- Image/video thumbnail text nếu có: ${compactText(postData.imageText, 2500) || '(chưa OCR / không lấy được chữ trong ảnh)'}`;
+}
+
 function buildCommentPrompt(postData) {
   return `Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và bình luận rất tự nhiên.
 
@@ -80,12 +87,47 @@ Cách định hướng bình luận:
 SKIP_COMMENT
 
 Dữ liệu bài viết:
-- Page/account name: ${compactText(postData.accountName, 500) || '(không lấy được)'}
-- Post text: ${compactText(postData.postText, 3500) || '(không lấy được)'}
-- Hashtags: ${(postData.hashtags || []).join(', ') || '(không có)'}
-- Image/video thumbnail text nếu có: ${compactText(postData.imageText, 2500) || '(chưa OCR / không lấy được chữ trong ảnh)'}
+${buildPostContextLines(postData)}
 
 Hãy trả về đúng 1 bình luận phù hợp nhất.`;
+}
+
+function buildReplyPrompt(postData, targetComment) {
+  return `Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và trả lời comment rất tự nhiên.
+
+Luồng bắt buộc:
+Bước 1: Đọc kỹ nội dung bài viết và hình ảnh/thumbnail nếu có.
+Bước 2: Đọc kỹ comment đang cần trả lời.
+Bước 3: Viết đúng 1 câu phản hồi vừa liên quan tới bài viết, vừa ăn khớp trực tiếp với comment đó.
+
+Nhiệm vụ:
+Dựa trên cả 2 phần ngữ cảnh dưới đây, hãy viết 1 reply vào comment. Reply phải nghe như người thật đang phản hồi comment trong thread, không phải comment mới độc lập vào bài.
+
+Phong cách mong muốn:
+- Tiếng Việt tự nhiên, Gen Z vừa phải, hơi đời
+- Bám sát chi tiết cụ thể của bài viết và ý của comment cần trả lời
+- Có thể đồng tình, trêu nhẹ, nối ý, bắt miếng hoặc bổ sung ngắn gọn
+- Không công kích cá nhân, không chửi tục nặng, không gây war
+- Không viết như chatbot, không văn mẫu, không nghị luận dài
+
+Yêu cầu bắt buộc:
+- Chỉ trả về đúng 1 reply duy nhất
+- Không giải thích
+- Không thêm dấu ngoặc kép
+- Không thêm tiền tố như “Reply:” hoặc “Comment:”
+- Bắt buộc viết thành một câu hoàn chỉnh từ 7 đến 25 từ
+- Không lặp lại nguyên văn caption hoặc comment gốc
+- Không trả lời chung chung nếu không hiểu bài/comment
+- Nếu thiếu nội dung bài viết hoặc không quét được comment cần trả lời, trả về chính xác chuỗi:
+SKIP_COMMENT
+
+Dữ liệu bài viết:
+${buildPostContextLines(postData)}
+
+Comment cần trả lời:
+- ${compactText(targetComment, 1200) || '(không lấy được)'}
+
+Hãy trả về đúng 1 reply phù hợp với cả bài viết và comment cần trả lời.`;
 }
 
 function sanitizeOneLineComment(text) {
@@ -121,6 +163,8 @@ module.exports = {
   BANNED_COMMENT_PATTERNS,
   SKIP_COMMENT,
   buildCommentPrompt,
+  buildPostContextLines,
+  buildReplyPrompt,
   compactText,
   sanitizeOneLineComment,
   validateGeneratedComment,

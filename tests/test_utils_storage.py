@@ -134,6 +134,16 @@ class UtilsTest(unittest.TestCase):
         self.assertIn("Caption có #hashtag", prompt)
         self.assertIn("SKIP_COMMENT", prompt)
 
+    def test_build_ai_comment_prompt_can_target_comment_reply_flow(self):
+        prompt = build_ai_comment_prompt("Caption bài viết", "Comment đang cần trả lời")
+
+        self.assertIn("Bước 1", prompt)
+        self.assertIn("Bước 2", prompt)
+        self.assertIn("Bước 3", prompt)
+        self.assertIn("Caption bài viết", prompt)
+        self.assertIn("Comment đang cần trả lời", prompt)
+        self.assertIn("reply", prompt.lower())
+
     def test_generate_ai_facebook_comment_api_flow_is_disabled(self):
         def requester(*_args, **_kwargs):
             raise AssertionError("Không được gọi API/requester trong luồng ChatGPT thủ công")
