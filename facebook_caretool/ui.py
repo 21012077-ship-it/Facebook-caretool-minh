@@ -25,6 +25,7 @@ import os
 import threading
 import time
 import random
+import re
 from datetime import datetime
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
@@ -1022,7 +1023,15 @@ class FacebookCareTool(ctk.CTk):
             if not self.interruptible_sleep(random.uniform(0.8, 1.4)):
                 return None
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không quét được comment nào có nút Phản hồi/Reply để trả lời."))
+        first_comment_text = self.extract_first_visible_comment_text(page)
+        if first_comment_text:
+            preview = first_comment_text[:140] + ("..." if len(first_comment_text) > 140 else "")
+            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(
+                f"[{n}] 💬 Không thấy comment nào có nút Phản hồi/Reply; dùng comment đầu tiên: {text}"
+            ))
+            return first_comment_text
+
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không quét được comment nào để trả lời."))
         return ""
 
     def extract_comment_text_near_reply_button(self, reply_button):
@@ -1067,6 +1076,106 @@ class FacebookCareTool(ctk.CTk):
             return ""
 
         return re.sub(r"\s+", " ", (raw_text or "")).strip()[:1200]
+
+
+    def extract_first_visible_comment_text(self, page):
+        try:
+            raw_text = page.evaluate(
+                r"""
+                () => {
+                    const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+                    const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
+                    const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+                    const isVisible = (element) => {
+                        if (!(element instanceof HTMLElement)) return false;
+                        const rect = element.getBoundingClientRect();
+                        const style = window.getComputedStyle(element);
+                        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+                    };
+                    const cleanLines = (text) => String(text || '')
+                        .split(/\n+/)
+                        .map(normalize)
+                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line))
+                        .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies)|bình luận|comments?)$/i.test(line));
+                    const extractText = (root) => {
+                        const textNodes = Array.from(root.querySelectorAll('div[dir="auto"], span[dir="auto"]'))
+                            .filter((element) => isVisible(element) && !element.closest('[role="button"]'))
+                            .flatMap((element) => cleanLines(element.innerText || element.textContent || ''));
+                        const lines = textNodes.length ? textNodes : cleanLines(root.innerText || root.textContent || '');
+                        return (lines
+                            .filter((line) => !/^(phản hồi|reply|trả lời|thích|like)$/i.test(line))
+                            .sort((a, b) => b.length - a.length)[0] || '').slice(0, 1200);
+                    };
+                    const selectors = [
+                        'div[aria-label*="Comment by" i]',
+                        'div[aria-label*="Bình luận của" i]',
+                        'div[role="article"]',
+                    ];
+                    const seen = new Set();
+                    for (const selector of selectors) {
+                        const nodes = Array.from(document.querySelectorAll(selector));
+                        const candidates = selector === 'div[role="article"]' && nodes.length > 1 ? nodes.slice(1) : nodes;
+                        for (const node of candidates.slice(0, 30)) {
+                            if (!isVisible(node)) continue;
+                            const rect = node.getBoundingClientRect();
+                            const key = `${Math.round(rect.top)}:${Math.round(rect.left)}:${Math.round(rect.width)}:${(node.textContent || '').trim().slice(0, 80)}`;
+                            if (seen.has(key)) continue;
+                            seen.add(key);
+                            const text = extractText(node).replace(/\s+/g, ' ').trim();
+                            if (text && text.length >= 2) return text;
+                        }
+                    }
+                    return '';
+                }
+                """
+            )
+        except Exception:
+            return ""
+
+        return re.sub(r"\s+", " ", (raw_text or "")).strip()[:1200]
+
+    def click_first_comment_reply_button(self, page, acc_name):
+        """Fallback: nếu chưa có nút Reply trong danh sách đã quét, hover comment đầu tiên để nút Reply hiện ra rồi bấm."""
+        try:
+            labelled_comments = page.locator('div[aria-label*="Comment by" i], div[aria-label*="Bình luận của" i]')
+            if labelled_comments.count() > 0:
+                first_comment = labelled_comments.first
+            else:
+                article_comments = page.locator('div[role="article"]')
+                first_comment = article_comments.nth(1) if article_comments.count() > 1 else article_comments.first
+            first_comment.wait_for(state="visible", timeout=4000)
+            first_comment.scroll_into_view_if_needed()
+            first_comment.hover(timeout=3000)
+            if not self.interruptible_sleep(random.uniform(0.5, 1.0)):
+                return False
+
+            reply_selectors = [
+                "div[role='button']:has-text('Phản hồi')",
+                "div[role='button']:has-text('Reply')",
+                "span:has-text('Phản hồi')",
+                "span:has-text('Reply')",
+                "text=Phản hồi",
+                "text=Reply",
+            ]
+            for selector in reply_selectors:
+                try:
+                    button = first_comment.locator(selector).first
+                    if button.is_visible(timeout=1000):
+                        return self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào comment đầu tiên.")
+                except Exception:
+                    continue
+
+            for selector in reply_selectors:
+                try:
+                    button = page.locator(selector).first
+                    if button.is_visible(timeout=1000):
+                        return self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào comment đầu tiên.")
+                except Exception:
+                    continue
+        except Exception:
+            return False
+
+        return False
 
     def click_existing_comment_reply_button(self, page, acc_name):
         """Chọn vị trí comment theo ưu tiên nghiệp vụ.
@@ -1131,7 +1240,10 @@ class FacebookCareTool(ctk.CTk):
             except Exception:
                 continue
 
-        return False
+        self.after(0, lambda n=acc_name: self.append_live_log(
+            f"[{n}] Không thấy nút Phản hồi/Reply sẵn; thử phản hồi ở comment đầu tiên."
+        ))
+        return self.click_first_comment_reply_button(page, acc_name)
 
     def remember_nearby_reply_button(self, reply_buttons: list[Any], button: Any) -> list[Any]:
         try:

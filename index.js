@@ -322,6 +322,109 @@ async function extractReplyCommentText(replyButton) {
   });
 }
 
+async function extractFirstCommentText(commentElement) {
+  return commentElement.evaluate((root) => {
+    const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+    const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
+    const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+    const isVisible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const cleanLines = (text) => String(text || '')
+      .split(/\n+/)
+      .map(normalize)
+      .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line))
+      .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies)|bình luận|comments?)$/i.test(line));
+
+    const textNodes = Array.from(root.querySelectorAll('div[dir="auto"], span[dir="auto"]'))
+      .filter((element) => isVisible(element) && !element.closest('[role="button"]'))
+      .flatMap((element) => cleanLines(element.innerText || element.textContent || ''));
+    const lines = textNodes.length ? textNodes : cleanLines(root.innerText || root.textContent || '');
+    const candidate = lines
+      .filter((line) => !/^(phản hồi|reply|trả lời|thích|like)$/i.test(line))
+      .sort((a, b) => b.length - a.length)[0] || '';
+    return candidate.slice(0, 1200);
+  });
+}
+
+async function findFirstVisibleComment(postElement) {
+  const selectors = [
+    'div[aria-label*="Comment by" i]',
+    'div[aria-label*="Bình luận của" i]',
+    'div[role="article"]',
+  ];
+  const seen = new Set();
+
+  for (const selector of selectors) {
+    const comments = postElement.locator(selector);
+    const count = await comments.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 20); i += 1) {
+      const container = comments.nth(i);
+      if (!(await container.isVisible({ timeout: 500 }).catch(() => false))) continue;
+      const key = await container.evaluate((node) => {
+        const rect = node.getBoundingClientRect();
+        return `${Math.round(rect.top)}:${Math.round(rect.left)}:${Math.round(rect.width)}:${(node.textContent || '').trim().slice(0, 80)}`;
+      }).catch(() => `${selector}:${i}`);
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const commentText = sanitizeScannedCommentText(await extractFirstCommentText(container).catch(() => ''));
+      if (!commentText || commentText.length < 2) continue;
+      return { container, commentText, isFirstCommentFallback: true };
+    }
+  }
+
+  return null;
+}
+
+async function clickReplyTarget(page, postElement, target) {
+  if (target.button) {
+    await target.button.scrollIntoViewIfNeeded().catch(() => null);
+    await humanDelay(500, 1200);
+    await target.button.click({ timeout: 5000 });
+    return;
+  }
+
+  if (!target.container) {
+    throw new Error('Không tìm thấy comment đầu tiên để phản hồi.');
+  }
+
+  await target.container.scrollIntoViewIfNeeded().catch(() => null);
+  await humanDelay(500, 1200);
+  await target.container.hover({ timeout: 3000 }).catch(() => null);
+  await page.waitForTimeout(700);
+
+  const replySelectors = [
+    'div[role="button"]:has-text("Phản hồi")',
+    'div[role="button"]:has-text("Reply")',
+    'span:has-text("Phản hồi")',
+    'span:has-text("Reply")',
+    'text=Phản hồi',
+    'text=Reply',
+  ];
+
+  for (const selector of replySelectors) {
+    const button = target.container.locator(selector).first();
+    if (await button.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await button.click({ timeout: 5000 });
+      return;
+    }
+  }
+
+  for (const selector of replySelectors) {
+    const button = postElement.locator(selector).first();
+    if (await button.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await button.click({ timeout: 5000 });
+      return;
+    }
+  }
+
+  throw new Error('Đã tìm thấy comment đầu tiên nhưng không hiện nút Phản hồi/Reply để bấm.');
+}
+
 async function findReplyTargetComment(postElement) {
   const selectors = [
     'div[role="button"]:has-text("Phản hồi")',
@@ -374,19 +477,26 @@ async function scanReplyTargetComment(page, postElement) {
     await page.mouse.wheel(0, 650).catch(() => null);
     await page.waitForTimeout(900);
   }
-  log('⚠️ Không quét được comment nào có nút Phản hồi/Reply để trả lời.');
+  const firstComment = await findFirstVisibleComment(postElement);
+  if (firstComment) {
+    log(`💬 Không thấy comment nào có nút Phản hồi/Reply; dùng comment đầu tiên: ${firstComment.commentText.slice(0, 140)}${firstComment.commentText.length > 140 ? '...' : ''}`);
+    return firstComment.commentText;
+  }
+
+  log('⚠️ Không quét được comment nào để trả lời.');
   return '';
 }
 
 async function findReplyBox(page, postElement) {
-  const target = await findReplyTargetComment(postElement);
+  const target = await findReplyTargetComment(postElement) || await findFirstVisibleComment(postElement);
   if (!target) {
-    throw new Error('Không tìm thấy comment có nút Phản hồi/Reply để trả lời.');
+    throw new Error('Không tìm thấy comment để trả lời.');
   }
 
-  await target.button.scrollIntoViewIfNeeded().catch(() => null);
-  await humanDelay(500, 1200);
-  await target.button.click({ timeout: 5000 });
+  if (target.isFirstCommentFallback) {
+    log('↪️ Không có nút Reply sẵn; thử phản hồi ở comment đầu tiên.');
+  }
+  await clickReplyTarget(page, postElement, target);
   await page.waitForTimeout(1000);
 
   const selectors = [
@@ -676,6 +786,7 @@ module.exports = {
   findMainPost,
   extractReplyCommentText,
   findReplyTargetComment,
+  findFirstVisibleComment,
   scanReplyTargetComment,
   scrapePostContext,
 };
