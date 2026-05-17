@@ -60,8 +60,8 @@ Yêu cầu bắt buộc:
 - Không giải thích
 - Không thêm dấu ngoặc kép
 - Không thêm tiền tố như “Comment:”
-- Độ dài ưu tiên khoảng 4 đến 16 từ
-- Có thể dài hơn một chút nếu thật sự cần, nhưng không được lan man
+- Bắt buộc viết thành một câu hoàn chỉnh từ 7 đến 25 từ
+- Tuyệt đối không trả lời cụt lủn 1, 2 chữ; không để câu bị lửng giữa chừng
 - Không lặp lại nguyên văn caption
 - Không viết comment chung chung không liên quan
 - Không dùng kiểu giọng AI như:
@@ -78,20 +78,12 @@ Yêu cầu bắt buộc:
   nếu không thực sự hợp ngữ cảnh
 - Không lạm dụng emoji
 - Nếu dùng emoji thì chỉ 0 hoặc 1 emoji
-- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, ví dụ:
-  + =)))
-  + 😭
-  + trời ơi
-  + có mùi rồi nha
-  + lộ quá rồi
-  + căng thế
-  + chịu luôn á
-  + ai mà chịu nổi
-  + nói vậy ai tin
-  + nhìn là biết rồi
-  + không ổn nha
-  + tới công chuyện rồi
-  + cười kiểu này là dở rồi
+- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, nhưng hãy ghép thành câu đủ ý, ví dụ:
+  + trời ơi chi tiết này nhìn là thấy có mùi rồi nha
+  + pha này lộ quá rồi, ai mà chịu nổi được chứ
+  + nói vậy ai tin, nhìn phản ứng là biết liền rồi
+  + tình huống này không ổn nha, tới công chuyện thật rồi
+  + cười kiểu này là dở rồi, chắc còn drama tiếp đây
 
 Cách định hướng bình luận:
 - Nếu bài là meme/phim/tình huống hài: phản ứng vui, bắt đúng chi tiết gây cười
@@ -111,7 +103,7 @@ Dữ liệu bài viết:
 Hãy trả về đúng 1 bình luận phù hợp nhất.`;
 }
 
-async function callChatCompletion({ model, messages, maxTokens = 80, temperature = 0.85 }) {
+async function callChatCompletion({ model, messages, maxTokens = 120, temperature = 0.85 }) {
   const apiKey = requireApiKey();
   const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -162,7 +154,11 @@ function validateGeneratedComment(comment) {
   if (BANNED_COMMENT_PATTERNS.some((pattern) => pattern.test(sanitized))) {
     return { ok: false, reason: 'generic', comment: sanitized };
   }
-  if (sanitized.length > 220 || sanitized.split(/\s+/).length > 35) {
+  const wordCount = sanitized.split(/\s+/).length;
+  if (wordCount < 7) {
+    return { ok: false, reason: 'too_short', comment: sanitized };
+  }
+  if (sanitized.length > 220 || wordCount > 35) {
     return { ok: false, reason: 'too_long', comment: sanitized };
   }
   return { ok: true, reason: '', comment: sanitized };

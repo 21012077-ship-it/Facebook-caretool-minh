@@ -389,20 +389,12 @@ Yêu cầu bắt buộc:
   nếu không thực sự hợp ngữ cảnh
 - Không lạm dụng emoji
 - Nếu dùng emoji thì chỉ 0 hoặc 1 emoji
-- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, ví dụ:
-  + =)))
-  + 😭
-  + trời ơi
-  + có mùi rồi nha
-  + lộ quá rồi
-  + căng thế
-  + chịu luôn á
-  + ai mà chịu nổi
-  + nói vậy ai tin
-  + nhìn là biết rồi
-  + không ổn nha
-  + tới công chuyện rồi
-  + cười kiểu này là dở rồi
+- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, nhưng hãy ghép thành câu đủ ý, ví dụ:
+  + trời ơi chi tiết này nhìn là thấy có mùi rồi nha
+  + pha này lộ quá rồi, ai mà chịu nổi được chứ
+  + nói vậy ai tin, nhìn phản ứng là biết liền rồi
+  + tình huống này không ổn nha, tới công chuyện thật rồi
+  + cười kiểu này là dở rồi, chắc còn drama tiếp đây
 
 Cách định hướng bình luận:
 - Nếu bài là meme/phim/tình huống hài: phản ứng vui, bắt đúng chi tiết gây cười
@@ -431,7 +423,7 @@ def extract_ai_comment_text(response_payload: Dict[str, Any]) -> str:
     return normalize_comment_text(str(content).strip().strip('"“”'))
 
 
-def validate_ai_comment(candidate: str | None) -> tuple[bool, str]:
+def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[bool, str]:
     normalized = normalize_comment_text(candidate)
     if not normalized:
         return False, "empty"
@@ -439,14 +431,15 @@ def validate_ai_comment(candidate: str | None) -> tuple[bool, str]:
         return False, "skip"
     if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in AI_COMMENT_BANNED_PATTERNS):
         return False, "generic"
-    if len(normalized) > 220 or len(normalized.split()) > 35:
+    word_count = len(normalized.split())
+    if word_count < min_words:
+        return False, "too_short"
+    if len(normalized) > 220 or word_count > 35:
         return False, "too_long"
 
-    # Không dùng is_facebook_standard_comment() ở đây vì hàm đó yêu cầu tối thiểu
-    # 12 ký tự cho comment tự soạn. AI prompt lại khuyến khích các phản ứng rất
-    # ngắn kiểu "căng thế", "lộ quá rồi", nên filter cũ làm AI có trả lời nhưng
-    # app vẫn bỏ qua và người dùng thấy như không ra comment. Giữ riêng các mẫu
-    # chặn spam/quảng cáo để không đăng nội dung nguy hiểm.
+    # Không dùng is_facebook_standard_comment() ở đây vì hàm đó có ngưỡng tối thiểu
+    # cố định cho comment tự soạn. Luồng AI cần tự truyền min_words khi muốn ép câu
+    # đủ ý, đồng thời vẫn giữ riêng các mẫu chặn spam/quảng cáo nguy hiểm.
     if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in FACEBOOK_COMMENT_BLOCKLIST_PATTERNS):
         return False, "spam_filter"
     return True, ""
@@ -468,85 +461,68 @@ def generate_ai_facebook_comment(
     fallback_comment: str = "",
     *,
     api_key: str = "",
-    model: str = "gemini-1.5-flash",
-    base_url: str = "", 
+    model: str = "gpt-4o-mini",
+    base_url: str = "",
     temperature: float = 0.9,
     timeout: float = 25,
     requester: Any = None,
 ) -> str | None:
-    """Gọi Gemini AI, sử dụng SDK mới nhất (google-genai) kèm cơ chế hiện lỗi chi tiết."""
-    from google import genai
-    from google.genai import types
-    import time
-    import random
-    
-    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
-    
-    keys = [k.strip() for k in api_key.split(",") if k.strip()]
+    """Gọi endpoint Chat Completions/OpenAI-compatible để tạo comment AI."""
+    keys = [key.strip() for key in api_key.split(",") if key.strip()]
     if not keys:
-        raise ValueError("Thiếu API KEY của Gemini, không thể tạo comment.")
-    random.shuffle(keys)
+        raise ValueError("Thiếu API key AI, không thể tạo comment.")
 
-    full_prompt = f"{AI_COMMENT_SYSTEM_PROMPT}\n\n{build_ai_comment_prompt(normalized_post)}"
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
-    
-    candidate = None
+    endpoint = normalize_ai_chat_completions_url(base_url or "https://api.openai.com/v1/chat/completions")
+    if not endpoint:
+        raise ValueError("Thiếu Base URL Chat Completions, không thể tạo comment.")
+
+    prompt = build_ai_comment_prompt(post_text)
+    payload = {
+        "model": model or "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": AI_COMMENT_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": max(0.0, min(float(temperature), 1.0)),
+        # 120 tokens đủ cho câu 7-25 từ, tránh model bị cắt cụt giữa câu.
+        "max_tokens": 120,
+    }
+
+    opener = requester or urllib.request.urlopen
     last_error_msg = "Không rõ nguyên nhân (Chưa gọi được API)"
-    
-    for current_key in keys:
-        client = genai.Client(api_key=current_key)
-        
-        for m_name in models_to_try:
-            retries = 2
-            for attempt in range(retries):
-                try:
-                    response = client.models.generate_content(
-                        model=m_name,
-                        contents=full_prompt,
-                        config=types.GenerateContentConfig(
-                            temperature=max(0.0, min(float(temperature), 1.0)),
-                            max_output_tokens=90,
-                        )
-                    )
-                    
-                    if response.text:
-                        candidate = normalize_comment_text(response.text.strip().strip('"“”'))
-                        break 
-                        
-                except Exception as exc:
-                    # Ghi nhận lại lỗi thật sự từ Google
-                    last_error_msg = str(exc)
-                    error_str = last_error_msg.lower()
-                    
-                    # Bắn log thẳng ra cửa sổ cmd/terminal để debug
-                    print(f"⚠️ [DEBUG] Lỗi ở Model {m_name}, Key đuôi {current_key[-4:]}: {last_error_msg}")
-                    
-                    if "429" in error_str or "quota" in error_str:
-                        if attempt < retries - 1:
-                            time.sleep(8)
-                            continue
-                        else:
-                            break
-                    elif "404" in error_str or "not found" in error_str:
-                        break
-                    else:
-                        break 
-            
-            if candidate:
-                break
-        if candidate:
-            break
 
-    if candidate is None:
-        # Ép tool in ra đúng cái lỗi cuối cùng mà Google chửi mình
-        raise ValueError(f"❌ Chi tiết lỗi từ Google: {last_error_msg[:150]}")
+    for key in keys:
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        response = None
+        try:
+            response = opener(request, timeout=timeout)
+            raw_body = response.read().decode("utf-8")
+            data = json.loads(raw_body)
+            candidate = extract_ai_comment_text(data)
+            is_valid, reason = validate_ai_comment(candidate, min_words=7)
+            if is_valid:
+                return candidate
+            if reason == "skip":
+                return "SKIP_COMMENT"
+            return None
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else str(exc)
+            last_error_msg = f"HTTP {exc.code}: {detail or exc.reason}"
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+            last_error_msg = str(exc)
+        finally:
+            if response is not None and hasattr(response, "close"):
+                response.close()
 
-    is_valid, reason = validate_ai_comment(candidate)
-    if is_valid:
-        return candidate
-    if reason == "skip":
-        return "SKIP_COMMENT"
-    return None
+    raise ValueError(f"Lỗi khi gọi AI: {last_error_msg[:180]}")
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.

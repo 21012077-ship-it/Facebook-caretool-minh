@@ -67,7 +67,7 @@ class FacebookCareTool(ctk.CTk):
             "comment_content": DEFAULT_COMMENT_CONTENT,
             "ai_comment_enabled": True,
             "ai_comment_base_url": "https://api.openai.com/v1/chat/completions",
-            "ai_comment_model": "gemini-1.5-flash",
+            "ai_comment_model": "gpt-4o-mini",
             "ai_comment_api_key": "",
         })
         self.comment_content_save_job = None
@@ -683,7 +683,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="Model", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
         self.ai_comment_model_entry = ctk.CTkEntry(ai_frame)
         self.ai_comment_model_entry.pack(fill="x", padx=18, pady=(4, 8))
-        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gemini-1.5-flash"))
+        self.ai_comment_model_entry.insert(0, self.app_settings.get("ai_comment_model", "gpt-4o-mini"))
         ctk.CTkLabel(ai_frame, text="Base URL Chat Completions", anchor="w").pack(fill="x", padx=18, pady=(4, 0))
         self.ai_comment_base_url_entry = ctk.CTkEntry(ai_frame)
         self.ai_comment_base_url_entry.pack(fill="x", padx=18, pady=(4, 12))
@@ -1363,7 +1363,7 @@ class FacebookCareTool(ctk.CTk):
         """
         enabled = bool(self.app_settings.get("ai_comment_enabled", True))
         api_key = self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
-        model = self.app_settings.get("ai_comment_model", "gemini-1.5-flash")
+        model = self.app_settings.get("ai_comment_model", "gpt-4o-mini")
         base_url = self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions")
 
         if hasattr(self, "ai_comment_enabled_var"):
@@ -1371,7 +1371,7 @@ class FacebookCareTool(ctk.CTk):
         if hasattr(self, "ai_comment_api_key_entry"):
             api_key = self.ai_comment_api_key_entry.get().strip() or os.environ.get("OPENAI_API_KEY", "")
         if hasattr(self, "ai_comment_model_entry"):
-            model = self.ai_comment_model_entry.get().strip() or "gemini-1.5-flash"
+            model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
         if hasattr(self, "ai_comment_base_url_entry"):
             base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
         base_url = normalize_ai_chat_completions_url(base_url)
@@ -1398,7 +1398,7 @@ class FacebookCareTool(ctk.CTk):
                 scanned_post_text,
                 "",
                 api_key=ai_comment_settings.get("api_key", ""),
-                model=ai_comment_settings.get("model", "gemini-1.5-flash"),
+                model=ai_comment_settings.get("model", "gpt-4o-mini"),
                 base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
             )
         except ValueError as exc:
@@ -1797,7 +1797,7 @@ class FacebookCareTool(ctk.CTk):
             return
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
         self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
-        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gemini-1.5-flash"
+        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
         self.app_settings["ai_comment_base_url"] = normalize_ai_chat_completions_url(
             self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
         )
