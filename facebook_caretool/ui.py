@@ -773,6 +773,7 @@ class FacebookCareTool(ctk.CTk):
 
         raw_content = self.comment_content.get("1.0", "end-1c").strip()
         self.save_comment_content()
+        self.sync_ai_comment_settings_from_widgets()
         scan_before_comment = self.scan_before_cmt_var.get()
 
         if not raw_content and not scan_before_comment:
@@ -1335,11 +1336,31 @@ class FacebookCareTool(ctk.CTk):
         return True
 
     def get_ai_comment_settings(self):
+        """Lấy cấu hình AI mới nhất từ UI, settings đã lưu hoặc biến môi trường.
+
+        Người dùng hay nhập API key/model ở màn Cài đặt rồi bấm chạy campaign ngay,
+        chưa kịp bấm "Lưu cài đặt AI". Vì vậy hàm này ưu tiên đọc trực tiếp từ
+        widget nếu widget đã được tạo, sau đó mới fallback về settings.json/env.
+        """
+        enabled = bool(self.app_settings.get("ai_comment_enabled", True))
+        api_key = self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", "")
+        model = self.app_settings.get("ai_comment_model", "gpt-4o-mini")
+        base_url = self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions")
+
+        if hasattr(self, "ai_comment_enabled_var"):
+            enabled = bool(self.ai_comment_enabled_var.get())
+        if hasattr(self, "ai_comment_api_key_entry"):
+            api_key = self.ai_comment_api_key_entry.get().strip() or os.environ.get("OPENAI_API_KEY", "")
+        if hasattr(self, "ai_comment_model_entry"):
+            model = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+        if hasattr(self, "ai_comment_base_url_entry"):
+            base_url = self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+
         return {
-            "enabled": bool(self.app_settings.get("ai_comment_enabled", True)),
-            "api_key": self.app_settings.get("ai_comment_api_key", "") or os.environ.get("OPENAI_API_KEY", ""),
-            "model": self.app_settings.get("ai_comment_model", "gpt-4o-mini"),
-            "base_url": self.app_settings.get("ai_comment_base_url", "https://api.openai.com/v1/chat/completions"),
+            "enabled": enabled,
+            "api_key": api_key,
+            "model": model,
+            "base_url": base_url,
         }
 
     def build_comment_from_scanned_content(self, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
@@ -1381,9 +1402,18 @@ class FacebookCareTool(ctk.CTk):
             comment_payloads = build_comment_payloads(AI_COMMENT_EMPTY_FALLBACK, comment_image_paths)
 
             if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
-                log_message = "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi AI tự nghĩ comment phù hợp."
+                masked_key = ai_comment_settings.get("api_key", "")[:7] + "..."
+                log_message = (
+                    "🤖 Đang chạy chế độ AI-only: mỗi bài sẽ được quét nội dung rồi gửi vào AI "
+                    f"({ai_comment_settings.get('model')}, key {masked_key}) để tự nghĩ comment phù hợp."
+                )
+            elif ai_comment_settings.get("enabled"):
+                log_message = (
+                    "🧠 Đang chạy chế độ tự tạo comment theo bài viết nhưng CHƯA có API key AI; "
+                    "tool sẽ rút ý chính bằng fallback an toàn. Nhập OPENAI_API_KEY hoặc lưu API key ở Cài đặt để dùng AI thật."
+                )
             else:
-                log_message = "🧠 Đang chạy chế độ tự tạo comment: mỗi bài sẽ được quét nội dung rồi tự rút ý chính để viết comment."
+                log_message = "🧠 AI đang tắt; tool sẽ quét nội dung rồi tự rút ý chính để viết comment dự phòng."
 
             self.after(0, lambda msg=log_message: self.append_live_log(msg))
 
@@ -1735,18 +1765,22 @@ class FacebookCareTool(ctk.CTk):
         if hasattr(self, "settings_data_label"):
             self.settings_data_label.configure(text=f"Accounts file: {ACCOUNTS_FILE}\nLogs file: {LOGS_FILE}\nTổng account: {len(self.accounts)}\nTổng log: {len(self.logs)}")
 
+    def sync_ai_comment_settings_from_widgets(self):
+        if not hasattr(self, "ai_comment_enabled_var"):
+            return
+        self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
+        self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
+        self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
+        self.app_settings["ai_comment_base_url"] = (
+            self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
+        )
+
     def save_app_settings(self):
         self.save_comment_content(show_message=False)
         self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
         self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
         self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
-        if hasattr(self, "ai_comment_enabled_var"):
-            self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
-            self.app_settings["ai_comment_api_key"] = self.ai_comment_api_key_entry.get().strip()
-            self.app_settings["ai_comment_model"] = self.ai_comment_model_entry.get().strip() or "gpt-4o-mini"
-            self.app_settings["ai_comment_base_url"] = (
-                self.ai_comment_base_url_entry.get().strip() or "https://api.openai.com/v1/chat/completions"
-            )
+        self.sync_ai_comment_settings_from_widgets()
         self.save_json("settings.json", self.app_settings)
         if hasattr(self, "browser_url_entry"):
             self.browser_url_entry.delete(0, "end")
