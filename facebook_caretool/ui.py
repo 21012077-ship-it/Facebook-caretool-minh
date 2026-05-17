@@ -988,6 +988,86 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không lấy được caption rõ ràng trong article chính."))
         return ""
 
+    def scan_comment_to_reply(self, page, acc_name):
+        """Quét comment hiện có để ChatGPT viết reply bám cả bài viết và comment đó."""
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Bắt đầu quét comment cần trả lời..."))
+        reply_selectors = [
+            "div[role='button']:has-text('Phản hồi')",
+            "div[role='button']:has-text('Reply')",
+            "span:has-text('Phản hồi')",
+            "span:has-text('Reply')",
+            "text=Phản hồi",
+            "text=Reply",
+        ]
+
+        for scroll_round in range(5):
+            if not self.wait_if_paused():
+                return None
+            for selector in reply_selectors:
+                try:
+                    buttons = page.locator(selector)
+                    for index in range(min(buttons.count(), 12)):
+                        button = buttons.nth(index)
+                        if not button.is_visible(timeout=500):
+                            continue
+                        comment_text = self.extract_comment_text_near_reply_button(button)
+                        if comment_text:
+                            preview = comment_text[:140] + ("..." if len(comment_text) > 140 else "")
+                            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] 💬 Đã quét comment cần trả lời: {text}"))
+                            return comment_text
+                except Exception:
+                    continue
+
+            page.mouse.wheel(0, random.randint(500, 850))
+            if not self.interruptible_sleep(random.uniform(0.8, 1.4)):
+                return None
+
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không quét được comment nào có nút Phản hồi/Reply để trả lời."))
+        return ""
+
+    def extract_comment_text_near_reply_button(self, reply_button):
+        try:
+            raw_text = reply_button.evaluate(
+                r"""
+                (button) => {
+                    const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+                    const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
+                    const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+                    const isVisible = (element) => {
+                        if (!(element instanceof HTMLElement)) return false;
+                        const rect = element.getBoundingClientRect();
+                        const style = window.getComputedStyle(element);
+                        return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+                    };
+                    const cleanLines = (text) => String(text || '')
+                        .split(/\n+/)
+                        .map(normalize)
+                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line))
+                        .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies))$/i.test(line));
+                    let node = button.parentElement;
+                    let best = '';
+                    for (let depth = 0; node && depth < 8; depth += 1) {
+                        if (!isVisible(node)) {
+                            node = node.parentElement;
+                            continue;
+                        }
+                        const lines = cleanLines(node.innerText || node.textContent || '');
+                        const candidate = lines
+                            .filter((line) => !/^(phản hồi|reply|trả lời|thích|like)$/i.test(line))
+                            .sort((a, b) => b.length - a.length)[0] || '';
+                        if (candidate.length > best.length) best = candidate;
+                        if (best.length >= 12 && best.length <= 500) break;
+                        node = node.parentElement;
+                    }
+                    return best.slice(0, 1200);
+                }
+                """
+            )
+        except Exception:
+            return ""
+
+        return re.sub(r"\s+", " ", (raw_text or "")).strip()[:1200]
+
     def click_existing_comment_reply_button(self, page, acc_name):
         """Chọn vị trí comment theo ưu tiên nghiệp vụ.
 
@@ -1034,25 +1114,13 @@ class FacebookCareTool(ctk.CTk):
                     return False
 
         comment_count = self.detect_post_comment_count(page)
-        if comment_count is not None and comment_count <= 10:
-            self.after(0, lambda n=acc_name, count=comment_count: self.append_live_log(
-                f"[{n}] Không thấy comment có phản hồi và bài có {count} comment, chuyển sang comment thẳng vào bài."
-            ))
-            return False
-
-        if comment_count is None and len(nearby_reply_buttons) <= 10:
-            self.after(0, lambda n=acc_name, count=len(nearby_reply_buttons): self.append_live_log(
-                f"[{n}] Không đọc được tổng comment; mới thấy {count} comment, chuyển sang comment thẳng vào bài."
-            ))
-            return False
-
         if comment_count is None:
             self.after(0, lambda n=acc_name: self.append_live_log(
-                f"[{n}] Không thấy comment có phản hồi; không đọc được tổng comment nhưng đã thấy hơn 10 comment, trả lời comment gần nhất."
+                f"[{n}] Không thấy comment có phản hồi; trả lời comment gần nhất đã quét được."
             ))
         else:
             self.after(0, lambda n=acc_name, count=comment_count: self.append_live_log(
-                f"[{n}] Không thấy comment có phản hồi; bài có {count} comment, trả lời comment gần nhất."
+                f"[{n}] Không thấy comment có phản hồi; bài có {count} comment, trả lời comment gần nhất đã quét được."
             ))
 
         for button in reversed(nearby_reply_buttons):
@@ -1346,14 +1414,14 @@ class FacebookCareTool(ctk.CTk):
             enabled = bool(self.ai_comment_enabled_var.get())
         return {"enabled": enabled}
 
-    def build_comment_from_scanned_content(self, page, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
+    def build_comment_from_scanned_content(self, page, scanned_post_text, fallback_content, acc_name, ai_comment_settings, target_comment_text=""):
         if not ai_comment_settings.get("enabled"):
             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."))
             return None
 
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Mở ChatGPT thủ công bằng cookie trình duyệt, paste prompt + dữ liệu bài đã quét..."))
         try:
-            chat_comment = self.generate_comment_with_manual_chatgpt(page, scanned_post_text, acc_name)
+            chat_comment = self.generate_comment_with_manual_chatgpt(page, scanned_post_text, acc_name, target_comment_text)
         except Exception as exc:
             self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ ChatGPT thủ công lỗi: {err[:160]}"))
             return None
@@ -1367,8 +1435,8 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ ChatGPT chưa tạo được comment hợp lệ, bỏ qua bài."))
         return None
 
-    def generate_comment_with_manual_chatgpt(self, facebook_page, scanned_post_text, acc_name):
-        prompt = build_ai_comment_prompt(scanned_post_text)
+    def generate_comment_with_manual_chatgpt(self, facebook_page, scanned_post_text, acc_name, target_comment_text=""):
+        prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
         chat_page = facebook_page.context.new_page()
         try:
             chat_page.goto("https://chatgpt.com/", wait_until="domcontentloaded", timeout=90000)
@@ -1479,7 +1547,7 @@ class FacebookCareTool(ctk.CTk):
             comment_payloads = [{"text": "", "media_path": comment_image_paths[0] if comment_image_paths else ""}]
 
             if ai_comment_settings.get("enabled"):
-                log_message = "🤖 Đang chạy chế độ ChatGPT thủ công: mỗi bài sẽ được quét nội dung, paste vào chatgpt.com bằng cookie trình duyệt rồi lấy comment trả về."
+                log_message = "🤖 Đang chạy chế độ ChatGPT thủ công: mỗi bài sẽ quét nội dung bài + comment cần trả lời, paste vào chatgpt.com bằng cookie trình duyệt rồi lấy reply trả về."
             else:
                 log_message = "❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."
 
@@ -1558,16 +1626,27 @@ class FacebookCareTool(ctk.CTk):
                         if not self.interruptible_sleep(2):
                             break
 
+                        target_comment_text = ""
                         if scan_before_comment:
                             scanned_post_text = self.scan_facebook_content_before_comment(page, acc_name)
                             if scanned_post_text is None:
                                 break
+                            target_comment_text = self.scan_comment_to_reply(page, acc_name)
+                            if target_comment_text is None:
+                                break
+                            if not target_comment_text:
+                                delay_sec = self.get_pause_seconds(delay_range)
+                                self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Bỏ qua link vì chưa quét được comment cần trả lời, nghỉ {int(d)} giây trước link tiếp theo..."))
+                                if not self.interruptible_sleep(delay_sec):
+                                    break
+                                continue
                             final_content = self.build_comment_from_scanned_content(
                                 page,
                                 scanned_post_text,
                                 fallback_content,
                                 acc_name,
                                 ai_comment_settings,
+                                target_comment_text,
                             )
                             if not final_content:
                                 delay_sec = self.get_pause_seconds(delay_range)
@@ -1578,7 +1657,7 @@ class FacebookCareTool(ctk.CTk):
                             self.after(
                                 0,
                                 lambda n=acc_name, text=final_content: self.append_live_log(
-                                    f"[{n}] 💬 Comment ChatGPT đề xuất: {text}"
+                                    f"[{n}] 💬 Reply ChatGPT đề xuất: {text}"
                                 ),
                             )
 
@@ -1594,8 +1673,14 @@ class FacebookCareTool(ctk.CTk):
 
                         comment_success = False
                         try:
-                            comment_box = self.focus_post_comment_box(page, acc_name)
-                            action_name = "comment"
+                            if target_comment_text:
+                                if not self.click_existing_comment_reply_button(page, acc_name):
+                                    raise RuntimeError("Không tìm thấy nút Phản hồi để đăng reply")
+                                comment_box = self.find_reply_comment_box(page)
+                                action_name = "reply"
+                            else:
+                                comment_box = self.focus_post_comment_box(page, acc_name)
+                                action_name = "comment"
                             if comment_box is None:
                                 break
 
@@ -1610,7 +1695,7 @@ class FacebookCareTool(ctk.CTk):
                                 break
 
                             comment_success = True
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã đăng comment vào bài post thành công."))
+                            self.after(0, lambda n=acc_name, action=action_name: self.append_live_log(f"[{n}] ✅ Đã đăng {action} thành công."))
 
                         except Exception as e:
                             self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment vào bài post. {err[:80]}"))

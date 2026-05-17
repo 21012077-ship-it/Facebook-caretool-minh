@@ -9,7 +9,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 - Quản lý danh sách account với trạng thái live/checkpoint/die, proxy, ghi chú và thời điểm tương tác.
 - Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng, hỗ trợ HTTP/HTTPS/SOCKS4/SOCKS5.
 - Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
-- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét đúng bài post chính, mở ChatGPT trên máy bằng cookie/profile trình duyệt, paste prompt đã lưu và lấy comment trả về; không gọi API ngoài và không sinh fallback bịa.
+- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét đúng bài post chính, quét comment cần trả lời, mở ChatGPT trên máy bằng cookie/profile trình duyệt, paste prompt đã lưu và lấy reply liên quan cả bài lẫn comment; không gọi API ngoài và không sinh fallback bịa.
 
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
@@ -63,11 +63,11 @@ Trong tab **Comment**, nếu muốn tool tự nghĩ comment theo từng bài mà
 1. Đăng nhập `https://chatgpt.com` trong browser/profile mà tool đang mở để cookie được lưu sẵn.
 2. Vào **Cài đặt → ChatGPT thủ công tạo comment**, bật **Bật ChatGPT thủ công tự nghĩ comment theo bài viết**.
 3. Ở màn **Comment**, bật **Quét bài rồi tự nghĩ comment phù hợp** và nên để trống ô **Nội dung Comment / Fallback**.
-4. Khi campaign chạy, tool quét nội dung bài Facebook, ghi rõ phần chữ trong ảnh nếu chưa OCR, mở `chatgpt.com`, paste prompt + dữ liệu bài viết đã quét, chờ ChatGPT trả đúng 1 comment rồi dán lại vào Facebook.
+4. Khi campaign chạy, tool quét nội dung bài Facebook, ghi rõ phần chữ trong ảnh nếu chưa OCR, quét comment cần trả lời, mở `chatgpt.com`, paste prompt + dữ liệu bài viết + comment đã quét, chờ ChatGPT trả đúng 1 reply rồi dán vào ô phản hồi của comment đó trên Facebook.
 
 ## CLI tự động tạo bình luận Facebook bằng ChatGPT thủ công
 
-CLI Node.js hỗ trợ nhập link bài viết Facebook, mở Chromium bằng profile cố định để giữ đăng nhập Facebook và ChatGPT, quét caption/media text nếu có, gửi prompt qua `https://chatgpt.com` trên web rồi mặc định chỉ preview. Luồng này không dùng API key.
+CLI Node.js hỗ trợ nhập link bài viết Facebook, mở Chromium bằng profile cố định để giữ đăng nhập Facebook và ChatGPT, quét caption/media text nếu có, quét comment cần trả lời, gửi prompt qua `https://chatgpt.com` trên web rồi mặc định chỉ preview. Luồng này không dùng API key.
 
 Cài dependency Node:
 
@@ -88,7 +88,7 @@ Chạy preview (mặc định, không tự đăng):
 node index.js "https://www.facebook.com/..."
 ```
 
-Tự đăng comment sau khi ChatGPT trả nội dung:
+Tự đăng reply vào comment đã quét sau khi ChatGPT trả nội dung:
 
 ```bash
 node index.js "https://www.facebook.com/..." --post
@@ -99,7 +99,8 @@ Ghi chú vận hành:
 - Chromium dùng profile cố định `fb_comment_profile/` (hoặc đặt `FB_PROFILE_DIR=/duong/dan/profile`) để giữ trạng thái đăng nhập Facebook và ChatGPT.
 - Nếu profile chưa đăng nhập Facebook hoặc ChatGPT, tool sẽ dừng và báo đăng nhập trước.
 - Tool chụp ảnh/thumbnail có kích thước phù hợp để đính kèm vào ChatGPT; nếu không lấy được chữ trong ảnh thì prompt/log ghi rõ chưa OCR. Có thể tắt bước chụp/gửi ảnh bằng `FB_COMMENT_ENABLE_VISION=0`.
-- Không có flag `--post` thì tool chỉ in comment ở chế độ preview, không dán và không tự bấm đăng.
+- Không có flag `--post` thì tool chỉ in reply ở chế độ preview, không dán và không tự bấm đăng.
+- Luồng tự tạo hiện chạy theo thứ tự: quét nội dung/ảnh bài viết → quét comment cần trả lời → nhờ ChatGPT tạo reply liên quan cả bài viết và comment → đăng vào ô phản hồi của comment.
 
 ## Chạy ứng dụng
 
