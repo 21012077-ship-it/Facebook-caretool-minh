@@ -163,7 +163,7 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
         self.assertEqual(captured["auth"], "Bearer test-key")
         self.assertIn('"model": "test-model"', captured["body"])
-        self.assertIn("không dùng câu mẫu chung chung", captured["body"])
+        self.assertIn("Ngắn, thường từ 4 đến 16 từ", captured["body"])
 
     def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
         class FakeResponse:
