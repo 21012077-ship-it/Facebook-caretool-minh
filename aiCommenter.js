@@ -4,11 +4,24 @@ const path = require('node:path');
 const DEFAULT_COMMENT_MODEL = process.env.OPENAI_COMMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DEFAULT_VISION_MODEL = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+const SKIP_COMMENT = 'SKIP_COMMENT';
+
+const BANNED_COMMENT_PATTERNS = [
+  /mình nghĩ nên/i,
+  /từng tình huống/i,
+  /mỗi người có thể/i,
+  /góc nhìn khác nhau/i,
+  /đáng suy ngẫm/i,
+  /vấn đề thú vị/i,
+  /rất đồng tình/i,
+];
 
 function requireApiKey() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('Thiếu OPENAI_API_KEY. Hãy export OPENAI_API_KEY trước khi chạy tool.');
+    const error = new Error('Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.');
+    error.code = 'OPENAI_API_KEY_MISSING';
+    throw error;
   }
   return apiKey;
 }
@@ -21,54 +34,79 @@ function compactText(value, maxLength = 3000) {
 }
 
 function buildCommentPrompt(postData) {
-  return `Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook, biết bắt vibe bài đăng và để lại bình luận ngắn rất tự nhiên.
+  return `Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và bình luận rất tự nhiên.
 
 Nhiệm vụ:
-Đọc nội dung bài viết, caption, hashtag và nội dung chữ trong ảnh nếu có, sau đó viết ra 1 bình luận phù hợp nhất với bài đó.
+Đọc kỹ toàn bộ ngữ cảnh của bài đăng Facebook, bao gồm:
+- Tên page hoặc tài khoản đăng bài
+- Nội dung caption/post text
+- Hashtag
+- Chữ trong ảnh hoặc thumbnail video nếu có
 
-Phong cách bình luận:
-- Kiểu Gen Z Việt Nam, tự nhiên, hơi đời, có cảm giác đang lướt thấy bài rồi comment ngay
-- Có thể hài hước, hùa theo, cà khịa nhẹ, thả miếng, bắt đúng chi tiết đáng chú ý trong bài
-- Ưu tiên comment khiến người đọc thấy “đúng ý bài ghê”
-- Không bình luận như chatbot, không lịch sự quá mức, không văn mẫu
+Sau đó viết ra đúng 1 bình luận phù hợp nhất với bài đăng.
+
+Phong cách bình luận mong muốn:
+- Kiểu Gen Z Việt Nam, tự nhiên, hơi đời
+- Giống người thật lướt thấy bài rồi comment ngay
+- Bám rất sát nội dung cụ thể của bài
+- Có thể hùa theo, thả miếng, trêu nhẹ, cà khịa nhẹ, bắt đúng tình huống gây cười hoặc chi tiết nổi bật
+- Ưu tiên những câu khiến người đọc thấy “comment này đúng bài ghê”
+- Không viết như chatbot
+- Không văn mẫu
+- Không nghị luận dài dòng
 
 Yêu cầu bắt buộc:
-- Chỉ viết 1 comment duy nhất
-- Ngắn, thường từ 4 đến 16 từ
-- Bám sát nội dung cụ thể của bài, không viết kiểu chung chung như “hay quá”, “đỉnh thật”, “xịn nha”
+- Chỉ trả về đúng 1 comment duy nhất
+- Không giải thích
+- Không thêm dấu ngoặc kép
+- Không thêm tiền tố như “Comment:”
+- Độ dài ưu tiên khoảng 4 đến 16 từ
+- Có thể dài hơn một chút nếu thật sự cần, nhưng không được lan man
 - Không lặp lại nguyên văn caption
-- Không giải thích, không thêm dấu ngoặc kép
-- Không cố nhồi trend nếu không hợp ngữ cảnh
-- Không câu nào cũng phải có emoji
-- Nếu dùng emoji thì chỉ 0–1 emoji là đủ
+- Không viết comment chung chung không liên quan
+- Không dùng kiểu giọng AI như:
+  + "mình nghĩ nên nhìn theo từng tình huống thực tế"
+  + "mỗi người có thể có một góc nhìn khác nhau"
+  + "nội dung này rất đáng suy ngẫm"
+  + "đây là một vấn đề thú vị"
+  + "rất đồng tình với quan điểm này"
+- Không dùng các lời khen rỗng như:
+  + "hay quá"
+  + "đỉnh thật"
+  + "tuyệt vời"
+  + "xịn nha"
+  nếu không thực sự hợp ngữ cảnh
+- Không lạm dụng emoji
+- Nếu dùng emoji thì chỉ 0 hoặc 1 emoji
+- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, ví dụ:
+  + =)))
+  + 😭
+  + trời ơi
+  + có mùi rồi nha
+  + lộ quá rồi
+  + căng thế
+  + chịu luôn á
+  + ai mà chịu nổi
+  + nói vậy ai tin
+  + nhìn là biết rồi
+  + không ổn nha
+  + tới công chuyện rồi
+  + cười kiểu này là dở rồi
 
-Có thể sử dụng tự nhiên các kiểu diễn đạt như:
-- =)))
-- 😭
-- trời ơi
-- có mùi rồi nha
-- lộ quá rồi
-- căng thế
-- chịu luôn á
-- ai mà chịu nổi
-- nói vậy ai tin
-- đúng bài này luôn
-- nhìn là biết rồi
-- không ổn nha
-- cười kiểu này là dở rồi
-
-Cách chọn hướng bình luận:
-- Nếu bài hài/meme/phim: phản ứng vui, bắt đúng miếng gây cười
-- Nếu bài có tình huống thả thính: comment kiểu trêu, hùa theo
-- Nếu bài drama nhẹ: hóng hớt vừa phải, không công kích
+Cách định hướng bình luận:
+- Nếu bài là meme/phim/tình huống hài: phản ứng vui, bắt đúng chi tiết gây cười
+- Nếu bài có tình huống yêu đương/thả thính/couple: trêu nhẹ, tinh nghịch
+- Nếu bài có drama nhẹ: hóng hớt vừa phải, không công kích
 - Nếu bài cảm xúc: đồng cảm ngắn gọn, tự nhiên
-- Nếu bài khoe thành quả/sản phẩm: khen thật, không tâng bốc giả tạo
+- Nếu bài quảng bá phim/chương trình: bình luận như một người xem đang phản ứng vào nội dung thú vị của bài, không viết kiểu quảng cáo
+- Nếu bài đăng không đủ ngữ cảnh, dữ liệu quét bị rác hoặc không hiểu được nội dung, trả về chính xác chuỗi:
+SKIP_COMMENT
 
 Dữ liệu bài viết:
-- Người/page đăng: ${compactText(postData.accountName, 500) || '(không lấy được)'}
-- Caption: ${compactText(postData.postText, 3500) || '(không lấy được)'}
-- Hashtag: ${(postData.hashtags || []).join(', ') || '(không có)'}
-- Nội dung chữ trong ảnh: ${compactText(postData.imageText, 2500) || '(không lấy được)'}
+- Page/account name: ${compactText(postData.accountName, 500) || '(không lấy được)'}
+- Post text: ${compactText(postData.postText, 3500) || '(không lấy được)'}
+- Hashtags: ${(postData.hashtags || []).join(', ') || '(không có)'}
+- Image/video thumbnail text nếu có: ${compactText(postData.imageText, 2500) || '(không lấy được)'}
 
 Hãy trả về đúng 1 bình luận phù hợp nhất.`;
 }
@@ -108,8 +146,26 @@ async function callChatCompletion({ model, messages, maxTokens = 80, temperature
 function sanitizeOneLineComment(text) {
   return compactText(text, 280)
     .replace(/^['"“”‘’]+|['"“”‘’]+$/g, '')
-    .replace(/^Comment AI đề xuất:\s*/i, '')
+    .replace(/^Comment\s*:?\s*/i, '')
+    .replace(/^Comment AI đề xuất\s*:?\s*/i, '')
     .trim();
+}
+
+function validateGeneratedComment(comment) {
+  const sanitized = sanitizeOneLineComment(comment);
+  if (!sanitized) {
+    return { ok: false, reason: 'empty', comment: '' };
+  }
+  if (sanitized === SKIP_COMMENT) {
+    return { ok: false, reason: 'skip', comment: sanitized };
+  }
+  if (BANNED_COMMENT_PATTERNS.some((pattern) => pattern.test(sanitized))) {
+    return { ok: false, reason: 'generic', comment: sanitized };
+  }
+  if (sanitized.length > 220 || sanitized.split(/\s+/).length > 35) {
+    return { ok: false, reason: 'too_long', comment: sanitized };
+  }
+  return { ok: true, reason: '', comment: sanitized };
 }
 
 async function generateComment(postData) {
@@ -119,17 +175,22 @@ async function generateComment(postData) {
     messages: [
       {
         role: 'system',
-        content: 'Bạn chỉ viết đúng một câu bình luận Facebook tiếng Việt, không giải thích.',
+        content:
+          'Bạn chỉ tạo đúng 1 bình luận Facebook tiếng Việt tự nhiên, bám sát ngữ cảnh bài viết. Nếu dữ liệu không đủ rõ để comment hợp lý, trả về đúng SKIP_COMMENT. Không giải thích.',
       },
       { role: 'user', content: prompt },
     ],
   });
 
-  const comment = sanitizeOneLineComment(content);
-  if (!comment) {
-    throw new Error('AI không trả về comment hợp lệ.');
+  const validation = validateGeneratedComment(content);
+  if (!validation.ok) {
+    const error = new Error(`AI không trả về comment có thể đăng: ${validation.reason}`);
+    error.code = validation.reason === 'skip' ? 'SKIP_COMMENT' : 'COMMENT_BLOCKED';
+    error.reason = validation.reason;
+    error.comment = validation.comment;
+    throw error;
   }
-  return comment;
+  return validation.comment;
 }
 
 async function extractTextFromImages(imagePaths) {
@@ -165,7 +226,13 @@ async function extractTextFromImages(imagePaths) {
 }
 
 module.exports = {
+  BANNED_COMMENT_PATTERNS,
+  SKIP_COMMENT,
   buildCommentPrompt,
+  compactText,
   extractTextFromImages,
   generateComment,
+  requireApiKey,
+  sanitizeOneLineComment,
+  validateGeneratedComment,
 };

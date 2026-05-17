@@ -2,7 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { chromium } = require('playwright');
-const { extractTextFromImages, generateComment } = require('./aiCommenter');
+const { extractTextFromImages, generateComment, requireApiKey } = require('./aiCommenter');
 
 const POST_FLAG = '--post';
 const DEFAULT_PROFILE_DIR = path.resolve(process.env.FB_PROFILE_DIR || 'fb_comment_profile');
@@ -13,7 +13,7 @@ function log(message) {
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nBiến môi trường cần có:\n  OPENAI_API_KEY=...\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  OPENAI_MODEL=gpt-4o-mini\n  FB_COMMENT_ENABLE_VISION=0  # tắt OCR bằng AI vision`);
+  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nBiến môi trường bắt buộc:\n  OPENAI_API_KEY=...\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  OPENAI_COMMENT_MODEL=gpt-4o-mini\n  OPENAI_VISION_MODEL=gpt-4o-mini\n  FB_COMMENT_ENABLE_VISION=0  # tắt OCR bằng AI vision`);
 }
 
 function parseArgs(argv) {
@@ -36,22 +36,6 @@ async function humanDelay(min = 350, max = 1200) {
   await new Promise((resolve) => setTimeout(resolve, waitMs));
 }
 
-async function safeClickByText(page, patterns, timeout = 2500) {
-  for (const pattern of patterns) {
-    try {
-      const locator = page.getByText(pattern, { exact: false }).first();
-      if (await locator.isVisible({ timeout })) {
-        await humanDelay();
-        await locator.click({ timeout });
-        return true;
-      }
-    } catch (_) {
-      // Facebook thay đổi DOM thường xuyên; thử selector kế tiếp.
-    }
-  }
-  return false;
-}
-
 async function ensureLoggedIn(context, page) {
   const cookies = await context.cookies('https://www.facebook.com');
   const hasLoginCookie = cookies.some((cookie) => cookie.name === 'c_user' && cookie.domain.includes('facebook.com'));
@@ -67,89 +51,189 @@ async function ensureLoggedIn(context, page) {
   }
 }
 
-async function expandPostText(page) {
+async function findMainPost(page) {
+  await page.locator('div[role="article"], [role="main"]').first().waitFor({ state: 'visible', timeout: 25000 });
+
+  const result = await page.evaluate(() => {
+    const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const uiNoise = /(menu|facebook|meta ai|messenger|watch|reels|marketplace|bạn bè|friends|nhóm|groups|thước phim|saved|đã lưu|kỷ niệm|memories|công cụ chuyên nghiệp|professional dashboard|bảng feed|feed|trang chủ|home|thông báo|notifications)/i;
+    const actionNoise = /^(thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|theo dõi|follow|tất cả cảm xúc|all reactions|xem thêm|see more|most relevant|phù hợp nhất)$/i;
+    const isVisible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 40 && rect.height > 40 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isChromeNode = (node) => Boolean(node.closest([
+      'div[role="banner"]',
+      'div[role="navigation"]',
+      'div[role="complementary"]',
+      'div[aria-label*="Menu" i]',
+      'div[aria-label*="Facebook" i]',
+      'nav',
+      'header',
+      'footer',
+    ].join(',')));
+    const collectOwnText = (root) => {
+      const texts = [];
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        if (!(node instanceof HTMLElement) || !isVisible(node) || isChromeNode(node)) continue;
+        const role = (node.getAttribute('role') || '').toLowerCase();
+        const aria = normalize(node.getAttribute('aria-label') || '');
+        if (['button', 'menuitem', 'navigation', 'banner', 'complementary'].includes(role)) continue;
+        if (aria && (actionNoise.test(aria) || uiNoise.test(aria))) continue;
+        const own = Array.from(node.childNodes)
+          .filter((child) => child.nodeType === Node.TEXT_NODE)
+          .map((child) => normalize(child.textContent))
+          .filter(Boolean)
+          .join(' ');
+        if (own && !actionNoise.test(own) && !uiNoise.test(own)) texts.push(own);
+      }
+      return normalize(texts.join(' '));
+    };
+    const articles = Array.from(document.querySelectorAll('div[role="article"]')).filter((node) => isVisible(node) && !isChromeNode(node));
+    const candidates = articles.map((article, index) => {
+      const rect = article.getBoundingClientRect();
+      const text = collectOwnText(article);
+      const hasComposer = Boolean(article.querySelector('[contenteditable="true"][role="textbox"], div[aria-label*="comment" i], div[aria-label*="bình luận" i]'));
+      const words = (text.match(/[A-Za-zÀ-ỹ0-9#]+/g) || []).length;
+      const mediaCount = article.querySelectorAll('img, video').length;
+      const chromePenalty = uiNoise.test(text) ? 200 : 0;
+      const viewportBonus = rect.top > -250 && rect.top < window.innerHeight + 250 ? 100 : 0;
+      const composerBonus = hasComposer ? 60 : 0;
+      return { index, score: words * 8 + mediaCount * 20 + viewportBonus + composerBonus - chromePenalty, textLength: text.length, top: Math.abs(rect.top) };
+    }).filter((candidate) => candidate.textLength > 0 || articles[candidate.index].querySelector('img, video'));
+    candidates.sort((a, b) => (b.score - a.score) || (a.top - b.top));
+    if (candidates[0]) return { type: 'article', index: candidates[0].index };
+    return { type: 'main', index: 0 };
+  });
+
+  const locator = result.type === 'article'
+    ? page.locator('div[role="article"]').nth(result.index)
+    : page.locator('[role="main"], main').first();
+  await locator.waitFor({ state: 'visible', timeout: 10000 });
+  return locator;
+}
+
+async function expandPostText(page, postElement) {
   const labels = ['Xem thêm', 'See more', 'Show more', 'Thêm'];
   for (let round = 0; round < 3; round += 1) {
-    const clicked = await safeClickByText(page, labels, 800);
+    let clicked = false;
+    for (const label of labels) {
+      const button = postElement.locator(`div[role="button"]:has-text("${label}"), span:has-text("${label}"), text=${label}`).first();
+      if (await button.isVisible({ timeout: 700 }).catch(() => false)) {
+        await humanDelay();
+        await button.click({ timeout: 2000 }).catch(() => null);
+        clicked = true;
+        break;
+      }
+    }
     if (!clicked) break;
     await page.waitForTimeout(800);
   }
 }
 
-async function findMainPost(page) {
-  const article = page.locator('div[role="article"]').first();
-  if (await article.count()) {
-    await article.waitFor({ state: 'visible', timeout: 20000 });
-    return article;
-  }
-
-  const main = page.locator('main').first();
-  if (await main.count()) {
-    await main.waitFor({ state: 'visible', timeout: 20000 });
-    return main;
-  }
-
-  throw new Error('Không tìm thấy vùng chứa bài viết chính trên Facebook.');
-}
-
-async function extractPostData(postLocator) {
-  return postLocator.evaluate((root) => {
-    const normalize = (text) => (text || '').replace(/\s+/g, ' ').trim();
-    const blockedPhrases = new Set([
-      'Like', 'Comment', 'Share', 'Thích', 'Bình luận', 'Chia sẻ', 'Send', 'Gửi',
-      'All reactions:', 'Most relevant', 'Phù hợp nhất', 'Write a comment…', 'Viết bình luận…',
+async function extractPostData(postElement) {
+  return postElement.evaluate((root) => {
+    const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+    const blockedExact = new Set([
+      'Like', 'Comment', 'Share', 'Send', 'Reply', 'Follow', 'All reactions:', 'Most relevant',
+      'Thích', 'Bình luận', 'Chia sẻ', 'Gửi', 'Phản hồi', 'Theo dõi', 'Tất cả cảm xúc', 'Phù hợp nhất',
+      'Write a comment…', 'Write a comment...', 'Viết bình luận…', 'Viết bình luận...',
     ]);
+    const blockedLine = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|theo dõi|follow|tất cả cảm xúc|all reactions|xem thêm|see more|ẩn bớt|see less|most relevant|phù hợp nhất)$/i;
+    const timeLine = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now)$/i;
+    const uiNoise = /^(?:menu|facebook|meta ai|messenger|watch|reels|marketplace|bạn bè|friends|nhóm|groups|thước phim|saved|đã lưu|kỷ niệm|memories|công cụ chuyên nghiệp|professional dashboard|bảng feed|feed|trang chủ|home|thông báo|notifications)$/i;
+    const isVisible = (element) => {
+      if (!(element instanceof HTMLElement)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const isChromeNode = (node) => Boolean(node.closest([
+      'div[role="banner"]',
+      'div[role="navigation"]',
+      'div[role="complementary"]',
+      'nav',
+      'header',
+      'footer',
+    ].join(',')));
+    const isNoise = (line) => {
+      if (!line) return true;
+      if (blockedExact.has(line) || blockedLine.test(line) || timeLine.test(line) || uiNoise.test(line)) return true;
+      if (/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|bình luận|comments?|shares?|lượt chia sẻ)$/i.test(line)) return true;
+      if (/^https?:\/\//i.test(line)) return true;
+      return false;
+    };
 
-    const rawVisibleText = root.innerText || '';
-    const allVisibleText = normalize(rawVisibleText);
-    const lines = rawVisibleText
-      .split(/\n+/)
-      .map(normalize)
-      .filter((line) => line && !blockedPhrases.has(line))
-      .filter((line) => !/^\d+[wdhms]$/.test(line));
+    const accountCandidates = Array.from(root.querySelectorAll('h1 a, h2 a, h3 a, strong a, span a[role="link"], a[role="link"]'))
+      .filter(isVisible)
+      .map((node) => normalize(node.innerText || node.getAttribute('aria-label') || node.textContent || ''))
+      .filter((text) => text && text.length <= 80 && !isNoise(text) && !/^#/.test(text));
 
-    const accountCandidates = Array.from(root.querySelectorAll('h1, h2, h3, strong a, span a'))
-      .map((node) => normalize(node.innerText || node.getAttribute('aria-label') || ''))
-      .filter(Boolean)
-      .filter((text) => text.length <= 80);
+    const lines = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (!(node instanceof HTMLElement) || !isVisible(node) || isChromeNode(node)) continue;
+      const role = (node.getAttribute('role') || '').toLowerCase();
+      const aria = normalize(node.getAttribute('aria-label') || '');
+      if (['button', 'menuitem', 'navigation', 'banner', 'complementary'].includes(role)) continue;
+      if (aria && isNoise(aria)) continue;
+      const ownText = Array.from(node.childNodes)
+        .filter((child) => child.nodeType === Node.TEXT_NODE)
+        .map((child) => normalize(child.textContent || ''))
+        .filter(Boolean)
+        .join(' ');
+      if (!ownText) continue;
+      for (const part of ownText.split(/\n+/).map(normalize)) {
+        if (!isNoise(part) && !accountCandidates.includes(part) && !lines.includes(part)) {
+          lines.push(part);
+        }
+      }
+    }
 
-    const mediaText = Array.from(root.querySelectorAll('img, video, [aria-label], [title]'))
-      .flatMap((node) => [node.getAttribute('alt'), node.getAttribute('aria-label'), node.getAttribute('title')])
-      .map(normalize)
-      .filter(Boolean)
-      .filter((text) => !/^Image may contain:/i.test(text) && !blockedPhrases.has(text));
-
-    const hashtags = Array.from(new Set((allVisibleText.match(/#[\p{L}\p{N}_]+/gu) || []).slice(0, 20)));
+    const joined = lines.join('\n');
+    const hashtags = Array.from(new Set((joined.match(/#[\p{L}\p{N}_]+/gu) || []).slice(0, 20)));
     const postText = lines
-      .filter((line) => !accountCandidates.includes(line))
-      .filter((line) => !line.startsWith('http'))
+      .filter((line) => !hashtags.includes(line))
       .join('\n')
       .slice(0, 5000);
+
+    const domMediaText = Array.from(root.querySelectorAll('img, video, [aria-label], [title]'))
+      .flatMap((node) => [node.getAttribute('alt'), node.getAttribute('aria-label'), node.getAttribute('title')])
+      .map(normalize)
+      .filter((text) => text && !/^Image may contain:/i.test(text) && !isNoise(text) && text.length > 2)
+      .filter((text, index, array) => array.indexOf(text) === index)
+      .slice(0, 12)
+      .join('\n');
 
     return {
       accountName: accountCandidates[0] || '',
       postText,
       hashtags,
-      domMediaText: Array.from(new Set(mediaText)).slice(0, 12).join('\n'),
+      domMediaText,
     };
   });
 }
 
-async function screenshotLikelyMedia(postLocator) {
-  if (!ENABLE_VISION || !process.env.OPENAI_API_KEY) {
+async function screenshotLikelyMedia(postElement) {
+  if (!ENABLE_VISION) {
     return [];
   }
 
   const dir = path.resolve('.tmp_fb_comment_media');
   await fs.mkdir(dir, { recursive: true });
-  const candidates = postLocator.locator('img, video');
-  const count = Math.min(await candidates.count(), 4);
+  const candidates = postElement.locator('img, video');
+  const count = await candidates.count();
   const paths = [];
 
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 0; i < count && paths.length < 4; i += 1) {
     const element = candidates.nth(i);
     const box = await element.boundingBox().catch(() => null);
-    if (!box || box.width < 120 || box.height < 80) {
+    if (!box || box.width < 180 || box.height < 120) {
       continue;
     }
     const imagePath = path.join(dir, `media-${Date.now()}-${i}.png`);
@@ -163,48 +247,99 @@ async function screenshotLikelyMedia(postLocator) {
   return paths;
 }
 
-async function getImageText(postLocator) {
-  const data = await extractPostData(postLocator);
+async function scrapePostContext(page) {
+  log('🔎 Đang quét nội dung bài Facebook...');
+  const postElement = await findMainPost(page);
+  await expandPostText(page, postElement);
+
+  const data = await extractPostData(postElement);
   let visionText = '';
+  let imagePaths = [];
   try {
-    const imagePaths = await screenshotLikelyMedia(postLocator);
-    if (imagePaths.length) {
+    imagePaths = await screenshotLikelyMedia(postElement);
+    if (imagePaths.length && ENABLE_VISION) {
       log(`Đang OCR chữ trong ${imagePaths.length} ảnh/thumbnail bằng AI vision...`);
       visionText = await extractTextFromImages(imagePaths);
     }
   } catch (error) {
     log(`Không OCR được ảnh/thumbnail, tiếp tục bằng caption. Lý do: ${error.message}`);
   }
-  return { ...data, imageText: [data.domMediaText, visionText].filter(Boolean).join('\n') };
+
+  const postData = {
+    accountName: data.accountName || '',
+    postText: data.postText || '',
+    hashtags: data.hashtags || [],
+    imagePaths,
+    imageText: [data.domMediaText, visionText].filter(Boolean).join('\n'),
+  };
+
+  console.log('===== POST CONTEXT =====');
+  console.log(`Account: ${postData.accountName || '(không lấy được)'}`);
+  console.log(`Post text: ${postData.postText || '(không lấy được)'}`);
+  console.log(`Hashtags: ${postData.hashtags.join(', ') || '(không có)'}`);
+  console.log(`Image text: ${postData.imageText || '(không có)'}`);
+  console.log('========================');
+
+  if (!postData.postText) {
+    log('⚠️ Không lấy được caption rõ ràng trong article chính. AI sẽ tự quyết định dựa trên phần còn lại.');
+  }
+  return { postElement, postData };
 }
 
-async function findCommentBox(page, postLocator) {
+async function findCommentBox(page, postElement) {
   const selectors = [
-    '[contenteditable="true"][role="textbox"][aria-label*="comment" i]',
-    '[contenteditable="true"][role="textbox"][aria-label*="bình luận" i]',
-    '[contenteditable="true"][aria-label*="comment" i]',
-    '[contenteditable="true"][aria-label*="bình luận" i]',
-    'div[role="textbox"][contenteditable="true"]',
+    '[contenteditable="true"][role="textbox"][aria-label*="comment" i]:not([aria-label*="reply" i])',
+    '[contenteditable="true"][role="textbox"][aria-label*="bình luận" i]:not([aria-label*="phản hồi" i])',
+    '[contenteditable="true"][aria-label*="comment" i]:not([aria-label*="reply" i])',
+    '[contenteditable="true"][aria-label*="bình luận" i]:not([aria-label*="phản hồi" i])',
+    'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
   ];
 
-  await safeClickByText(page, [/Bình luận/i, /Comment/i], 1000).catch(() => false);
-  await humanDelay();
+  const clickTargets = [
+    'div[role="button"][aria-label="Bình luận"]',
+    'div[role="button"][aria-label="Comment"]',
+    'span:has-text("Bình luận")',
+    'span:has-text("Comment")',
+  ];
 
   for (const selector of selectors) {
-    const inPost = postLocator.locator(selector).first();
-    if (await inPost.isVisible({ timeout: 1500 }).catch(() => false)) {
-      return inPost;
-    }
-    const onPage = page.locator(selector).first();
-    if (await onPage.isVisible({ timeout: 1500 }).catch(() => false)) {
-      return onPage;
+    const box = postElement.locator(selector).first();
+    if (await box.isVisible({ timeout: 1200 }).catch(() => false)) {
+      const aria = (await box.getAttribute('aria-label').catch(() => '') || '').toLowerCase();
+      if (!/reply|phản hồi|trả lời/.test(aria)) return box;
     }
   }
-  throw new Error('Không tìm thấy ô comment của bài viết.');
+
+  for (const target of clickTargets) {
+    const button = postElement.locator(target).first();
+    if (await button.isVisible({ timeout: 1000 }).catch(() => false)) {
+      const label = (await button.textContent().catch(() => '') || '') + ' ' + (await button.getAttribute('aria-label').catch(() => '') || '');
+      if (/phản hồi|reply|trả lời/i.test(label)) continue;
+      await button.scrollIntoViewIfNeeded().catch(() => null);
+      await humanDelay();
+      await button.click({ timeout: 3000 }).catch(() => null);
+      await page.waitForTimeout(1000);
+      break;
+    }
+  }
+
+  for (const selector of selectors) {
+    const boxes = postElement.locator(selector);
+    const count = await boxes.count().catch(() => 0);
+    for (let i = 0; i < Math.min(count, 6); i += 1) {
+      const box = boxes.nth(i);
+      if (!(await box.isVisible({ timeout: 800 }).catch(() => false))) continue;
+      const aria = (await box.getAttribute('aria-label').catch(() => '') || '').toLowerCase();
+      if (!/reply|phản hồi|trả lời/.test(aria)) return box;
+    }
+  }
+
+  throw new Error('Không tìm thấy ô bình luận chính của bài post, bỏ qua link.');
 }
 
-async function typeAndPost(page, postLocator, comment) {
-  const box = await findCommentBox(page, postLocator);
+async function typeAndPost(page, postElement, comment) {
+  log('✍️ Đang nhập comment vào ô bình luận bài post...');
+  const box = await findCommentBox(page, postElement);
   await humanDelay(500, 1400);
   await box.click({ timeout: 10000 });
   await humanDelay(300, 900);
@@ -213,7 +348,7 @@ async function typeAndPost(page, postLocator, comment) {
   await humanDelay(700, 1800);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(2500);
-  log('Đã đăng comment thành công.');
+  log('✅ Đã đăng comment vào bài post thành công.');
 }
 
 async function main() {
@@ -223,6 +358,14 @@ async function main() {
   const { url, shouldPost } = parsed;
   log(`Chế độ: ${shouldPost ? 'Auto-post' : 'Preview'}`);
   log(`Dùng Chromium profile cố định: ${DEFAULT_PROFILE_DIR}`);
+
+  try {
+    requireApiKey();
+  } catch (error) {
+    console.error(`❌ ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
 
   const context = await chromium.launchPersistentContext(DEFAULT_PROFILE_DIR, {
     channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL || undefined,
@@ -250,23 +393,33 @@ async function main() {
     await page.waitForLoadState('networkidle', { timeout: 25000 }).catch(() => null);
     await page.waitForTimeout(3000);
 
-    log('Tìm vùng chứa post chính...');
-    const postLocator = await findMainPost(page);
-    await expandPostText(page);
+    const { postElement, postData } = await scrapePostContext(page);
 
-    log('Quét caption, page/account, hashtag và chữ trong media nếu có...');
-    const postData = await getImageText(postLocator);
-    if (!postData.postText && !postData.imageText) {
-      throw new Error('Không lấy được caption hoặc chữ trong ảnh/video thumbnail của bài viết.');
+    log('🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment...');
+    let comment;
+    try {
+      comment = await generateComment(postData);
+    } catch (error) {
+      if (error.code === 'SKIP_COMMENT') {
+        log('⚠️ AI trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài.');
+        return;
+      }
+      if (error.reason === 'empty') {
+        log('⚠️ AI trả về comment rỗng, bỏ qua bài.');
+        return;
+      }
+      if (error.reason === 'too_long') {
+        log('⚠️ Comment AI dài bất thường, bỏ qua bài.');
+        return;
+      }
+      if (error.reason === 'generic') {
+        log('Comment bị chặn vì quá chung chung');
+        return;
+      }
+      throw error;
     }
 
-    log(`Page/account: ${postData.accountName || '(không lấy được)'}`);
-    log(`Caption length: ${postData.postText.length} ký tự; Image text length: ${postData.imageText.length} ký tự`);
-
-    log('Gửi dữ liệu bài viết vào AI để tạo comment...');
-    const comment = await generateComment(postData);
-    console.log('\nComment AI đề xuất:');
-    console.log(`"${comment}"\n`);
+    console.log(`💬 Comment AI đề xuất: ${comment}`);
 
     if (!shouldPost) {
       log('Preview mode: chỉ hiển thị comment để duyệt, không dán và không đăng.');
@@ -274,7 +427,7 @@ async function main() {
       return;
     }
 
-    await typeAndPost(page, postLocator, comment);
+    await typeAndPost(page, postElement, comment);
   } finally {
     await context.close().catch(() => null);
   }
@@ -284,3 +437,9 @@ main().catch((error) => {
   console.error(`\nLỗi: ${error.message}`);
   process.exitCode = 1;
 });
+
+module.exports = {
+  extractPostData,
+  findMainPost,
+  scrapePostContext,
+};

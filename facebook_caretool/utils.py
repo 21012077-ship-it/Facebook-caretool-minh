@@ -325,87 +325,100 @@ def build_contextual_facebook_comment(
     *,
     chooser=random.choice,
 ) -> str:
-    """Tạo comment ngắn dựa trực tiếp vào nội dung quét được, không chọn từ bộ câu mẫu cố định.
-
-    Khi không có API AI, hàm vẫn rút một cụm ý nổi bật trong bài rồi viết lại thành
-    một phản hồi tự nhiên. Nếu không đọc được bài, fallback của người dùng chỉ được
-    dùng khi vượt kiểm tra an toàn cơ bản.
-    """
-    normalized_post = clean_scanned_post_text(post_text)
-    fallback = normalize_comment_text(fallback_comment)
-    if not normalized_post and is_facebook_standard_comment(fallback):
-        return fallback
-
-    focus = extract_post_focus(normalized_post)
-    if focus:
-        # Khi đã quét được nội dung Facebook rõ ràng thì dùng trực tiếp chính
-        # phần đã quét, thay vì viết lại thành câu mẫu chung chung. Điều này
-        # giúp phản hồi bám đúng comment/bài viết mà tool vừa đọc được.
-        scanned_comment = normalize_comment_text(normalized_post)
-        if is_facebook_standard_comment(scanned_comment):
-            return scanned_comment
-
-        if "?" in normalized_post:
-            comment = (
-                f"Với ý về {focus}, mình nghĩ nên nhìn theo từng tình huống thực tế "
-                "vì mỗi người có thể gặp một bối cảnh khác nhau."
-            )
-        else:
-            comment = (
-                f"Mình thấy phần {focus} khá đáng chú ý, vì nó gợi ra một góc nhìn "
-                "rất dễ liên hệ với thực tế."
-            )
-        comment = normalize_comment_text(comment)
-        if is_facebook_standard_comment(comment):
-            return comment
-
-    if is_facebook_standard_comment(fallback):
-        return fallback
-    return "Mình thấy nội dung này có vài điểm đáng suy nghĩ và khá dễ liên hệ với thực tế."
+    """Không còn sinh comment fallback; giữ hàm để tương thích import cũ."""
+    return ""
 
 
-AI_COMMENT_SYSTEM_PROMPT = """Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook, biết bắt vibe bài đăng và để lại bình luận ngắn rất tự nhiên.
+AI_COMMENT_SYSTEM_PROMPT = """Bạn chỉ tạo đúng 1 bình luận Facebook tiếng Việt tự nhiên, bám sát ngữ cảnh bài viết. Nếu dữ liệu không đủ rõ để comment hợp lý, trả về đúng SKIP_COMMENT. Không giải thích."""
+
+AI_COMMENT_BANNED_PATTERNS = [
+    r"mình nghĩ nên",
+    r"từng tình huống",
+    r"mỗi người có thể",
+    r"góc nhìn khác nhau",
+    r"đáng suy ngẫm",
+    r"vấn đề thú vị",
+    r"rất đồng tình",
+]
+
+
+def build_ai_comment_prompt(post_text: str | None) -> str:
+    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
+    return f"""Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và bình luận rất tự nhiên.
 
 Nhiệm vụ:
-Đọc nội dung bài viết, caption, hashtag và nội dung chữ trong ảnh nếu có, sau đó viết ra 1 bình luận phù hợp nhất với bài đó.
+Đọc kỹ toàn bộ ngữ cảnh của bài đăng Facebook, bao gồm:
+- Tên page hoặc tài khoản đăng bài
+- Nội dung caption/post text
+- Hashtag
+- Chữ trong ảnh hoặc thumbnail video nếu có
 
-Phong cách bình luận:
-- Kiểu Gen Z Việt Nam, tự nhiên, hơi đời, có cảm giác đang lướt thấy bài rồi comment ngay
-- Có thể hài hước, hùa theo, cà khịa nhẹ, thả miếng, bắt đúng chi tiết đáng chú ý trong bài
-- Ưu tiên comment khiến người đọc thấy “đúng ý bài ghê”
-- Không bình luận như chatbot, không lịch sự quá mức, không văn mẫu
+Sau đó viết ra đúng 1 bình luận phù hợp nhất với bài đăng.
+
+Phong cách bình luận mong muốn:
+- Kiểu Gen Z Việt Nam, tự nhiên, hơi đời
+- Giống người thật lướt thấy bài rồi comment ngay
+- Bám rất sát nội dung cụ thể của bài
+- Có thể hùa theo, thả miếng, trêu nhẹ, cà khịa nhẹ, bắt đúng tình huống gây cười hoặc chi tiết nổi bật
+- Ưu tiên những câu khiến người đọc thấy “comment này đúng bài ghê”
+- Không viết như chatbot
+- Không văn mẫu
+- Không nghị luận dài dòng
 
 Yêu cầu bắt buộc:
-- Chỉ viết 1 comment duy nhất
-- Ngắn, thường từ 4 đến 16 từ
-- Bám sát nội dung cụ thể của bài, không viết kiểu chung chung như “hay quá”, “đỉnh thật”, “xịn nha”
+- Chỉ trả về đúng 1 comment duy nhất
+- Không giải thích
+- Không thêm dấu ngoặc kép
+- Không thêm tiền tố như “Comment:”
+- Độ dài ưu tiên khoảng 4 đến 16 từ
+- Có thể dài hơn một chút nếu thật sự cần, nhưng không được lan man
 - Không lặp lại nguyên văn caption
-- Không giải thích, không thêm dấu ngoặc kép
-- Không cố nhồi trend nếu không hợp ngữ cảnh
-- Không câu nào cũng phải có emoji
-- Nếu dùng emoji thì chỉ 0–1 emoji là đủ
+- Không viết comment chung chung không liên quan
+- Không dùng kiểu giọng AI như:
+  + "mình nghĩ nên nhìn theo từng tình huống thực tế"
+  + "mỗi người có thể có một góc nhìn khác nhau"
+  + "nội dung này rất đáng suy ngẫm"
+  + "đây là một vấn đề thú vị"
+  + "rất đồng tình với quan điểm này"
+- Không dùng các lời khen rỗng như:
+  + "hay quá"
+  + "đỉnh thật"
+  + "tuyệt vời"
+  + "xịn nha"
+  nếu không thực sự hợp ngữ cảnh
+- Không lạm dụng emoji
+- Nếu dùng emoji thì chỉ 0 hoặc 1 emoji
+- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, ví dụ:
+  + =)))
+  + 😭
+  + trời ơi
+  + có mùi rồi nha
+  + lộ quá rồi
+  + căng thế
+  + chịu luôn á
+  + ai mà chịu nổi
+  + nói vậy ai tin
+  + nhìn là biết rồi
+  + không ổn nha
+  + tới công chuyện rồi
+  + cười kiểu này là dở rồi
 
-Có thể sử dụng tự nhiên các kiểu diễn đạt như:
-- =)))
-- 😭
-- trời ơi
-- có mùi rồi nha
-- lộ quá rồi
-- căng thế
-- chịu luôn á
-- ai mà chịu nổi
-- nói vậy ai tin
-- đúng bài này luôn
-- nhìn là biết rồi
-- không ổn nha
-- cười kiểu này là dở rồi
-
-Cách chọn hướng bình luận:
-- Nếu bài hài/meme/phim: phản ứng vui, bắt đúng miếng gây cười
-- Nếu bài có tình huống thả thính: comment kiểu trêu, hùa theo
-- Nếu bài drama nhẹ: hóng hớt vừa phải, không công kích
+Cách định hướng bình luận:
+- Nếu bài là meme/phim/tình huống hài: phản ứng vui, bắt đúng chi tiết gây cười
+- Nếu bài có tình huống yêu đương/thả thính/couple: trêu nhẹ, tinh nghịch
+- Nếu bài có drama nhẹ: hóng hớt vừa phải, không công kích
 - Nếu bài cảm xúc: đồng cảm ngắn gọn, tự nhiên
-- Nếu bài khoe thành quả/sản phẩm: khen thật, không tâng bốc giả tạo"""
+- Nếu bài quảng bá phim/chương trình: bình luận như một người xem đang phản ứng vào nội dung thú vị của bài, không viết kiểu quảng cáo
+- Nếu bài đăng không đủ ngữ cảnh, dữ liệu quét bị rác hoặc không hiểu được nội dung, trả về chính xác chuỗi:
+SKIP_COMMENT
+
+Dữ liệu bài viết:
+- Page/account name: (đã gộp trong dữ liệu quét nếu lấy được)
+- Post text: {normalized_post or '(không lấy được)'}
+- Hashtags: (đã gộp trong dữ liệu quét nếu có)
+- Image/video thumbnail text nếu có: (đã gộp trong dữ liệu quét nếu lấy được)
+
+Hãy trả về đúng 1 bình luận phù hợp nhất."""
 
 
 def extract_ai_comment_text(response_payload: Dict[str, Any]) -> str:
@@ -415,6 +428,21 @@ def extract_ai_comment_text(response_payload: Dict[str, Any]) -> str:
     except (KeyError, IndexError, TypeError):
         return ""
     return normalize_comment_text(str(content).strip().strip('"“”'))
+
+
+def validate_ai_comment(candidate: str | None) -> tuple[bool, str]:
+    normalized = normalize_comment_text(candidate)
+    if not normalized:
+        return False, "empty"
+    if normalized == "SKIP_COMMENT":
+        return False, "skip"
+    if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in AI_COMMENT_BANNED_PATTERNS):
+        return False, "generic"
+    if len(normalized) > 220 or len(normalized.split()) > 35:
+        return False, "too_long"
+    if not is_facebook_standard_comment(normalized):
+        return False, "standard_filter"
+    return True, ""
 
 
 def generate_ai_facebook_comment(
@@ -428,36 +456,20 @@ def generate_ai_facebook_comment(
     timeout: float = 25,
     requester: Any = None,
 ) -> str | None:
-    """Gọi AI để tạo comment ngẫu nhiên theo nội dung bài viết.
+    """Gọi AI thật để tạo comment theo nội dung bài viết; không có fallback tự bịa."""
+    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
+    if not api_key.strip():
+        raise ValueError("Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.")
+    if not model.strip() or not base_url.strip():
+        raise ValueError("Thiếu cấu hình model/base_url AI, bỏ qua link vì không thể tạo comment bằng AI.")
 
-    Trả về ``None`` khi thiếu cấu hình hoặc API lỗi để UI dùng fallback an toàn.
-    Comment AI vẫn được kiểm tra qua bộ lọc spam cơ bản trước khi sử dụng.
-    """
-    normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:1800]
-    if not normalized_post or not api_key.strip() or not model.strip() or not base_url.strip():
-        return None
-
-    safe_fallback = normalize_comment_text(fallback_comment)
-    variant_id = random.randint(1000, 9999)
     payload = {
         "model": model.strip(),
         "temperature": max(0.0, min(float(temperature), 1.5)),
         "max_tokens": 90,
         "messages": [
             {"role": "system", "content": AI_COMMENT_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": (
-                    "Dữ liệu bài viết:\n"
-                    "- Người/page đăng: (không lấy được)\n"
-                    f"- Caption: {normalized_post}\n"
-                    "- Hashtag: (không có)\n"
-                    "- Nội dung chữ trong ảnh: (đã gộp trong caption nếu quét được)\n\n"
-                    f"Mã biến thể để tránh lặp: {variant_id}.\n"
-                    f"Mẫu dự phòng tham khảo nếu phù hợp: {safe_fallback}\n\n"
-                    "Hãy trả về đúng 1 bình luận phù hợp nhất."
-                ),
-            },
+            {"role": "user", "content": build_ai_comment_prompt(normalized_post)},
         ],
     }
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -483,7 +495,8 @@ def generate_ai_facebook_comment(
     except (OSError, urllib.error.URLError, json.JSONDecodeError, ValueError, TypeError):
         return None
 
-    if is_facebook_standard_comment(candidate):
+    is_valid, _reason = validate_ai_comment(candidate)
+    if is_valid:
         return candidate
     return None
 

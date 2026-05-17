@@ -97,57 +97,22 @@ class UtilsTest(unittest.TestCase):
     def test_detect_facebook_post_category_question(self):
         self.assertEqual(detect_facebook_post_category("Mọi người nghĩ nên chọn cách nào?"), "question")
 
-    def test_build_contextual_facebook_comment_uses_scanned_text_directly(self):
-        scanned_text = "Hướng dẫn cách chăm sóc tài khoản an toàn hơn"
-        comment = build_contextual_facebook_comment(
-            scanned_text,
-            "Inbox mình để nhận ưu đãi https://example.com",
-        )
-
-        self.assertEqual(comment, scanned_text)
-        self.assertNotIn("Inbox", comment)
-        self.assertTrue(is_facebook_standard_comment(comment))
-
-    def test_build_contextual_facebook_comment_keeps_scanned_question_directly(self):
-        scanned_text = "ủa khoan này là chiếu lại hay p2 hẵn hoi z ae? phần kết ảnh bị phản bội bởi con trai là p1 hay p2 ấy nhỉ"
-
+    def test_build_contextual_facebook_comment_no_longer_generates_fallback(self):
         self.assertEqual(
-            build_contextual_facebook_comment(scanned_text, "Mình thấy nội dung này khá hữu ích và thực tế."),
-            scanned_text,
+            build_contextual_facebook_comment(
+                "Menu trên Facebook Minh Pán Netfix Meta AI Bạn bè",
+                "Cảm ơn bạn đã chia sẻ thông tin hữu ích.",
+            ),
+            "",
         )
-
-    def test_build_contextual_facebook_comment_uses_safe_fallback_without_scan_text(self):
-        self.assertEqual(
-            build_contextual_facebook_comment("", "Cảm ơn bạn đã chia sẻ thông tin hữu ích."),
-            "Cảm ơn bạn đã chia sẻ thông tin hữu ích.",
-        )
-
-    def test_build_contextual_facebook_comment_ignores_facebook_ui_noise(self):
-        comment = build_contextual_facebook_comment(
-            "Số thông báo chưa đọc Menu trên Facebook Pham Gia",
-            "Mình thấy nội dung này khá hữu ích và thực tế.",
-        )
-
-        self.assertEqual(comment, "Mình thấy nội dung này khá hữu ích và thực tế.")
-        self.assertNotIn("Số thông báo", comment)
-        self.assertNotIn("Facebook Pham Gia", comment)
-
-    def test_build_contextual_facebook_comment_ignores_sidebar_menu_noise(self):
-        comment = build_contextual_facebook_comment(
-            "Menu trên Facebook Minh Pán Netfix Meta AI Bạn bè Công cụ chuyên nghiệp Kỷ niệm Đã lưu Nhóm Thước phim Marketplace Bảng feed",
-            "Mình thấy nội dung này khá hữu ích và thực tế.",
-        )
-
-        self.assertEqual(comment, "Mình thấy nội dung này khá hữu ích và thực tế.")
-        self.assertNotIn("Meta AI", comment)
-        self.assertNotIn("Marketplace", comment)
 
     def test_is_facebook_standard_comment_rejects_spam_signals(self):
         self.assertFalse(is_facebook_standard_comment("Inbox ngay https://example.com để chốt đơn!!!"))
 
 
     def test_generate_ai_facebook_comment_requires_configuration(self):
-        self.assertIsNone(generate_ai_facebook_comment("Bài viết hữu ích", api_key=""))
+        with self.assertRaises(ValueError):
+            generate_ai_facebook_comment("Bài viết hữu ích", api_key="")
 
     def test_generate_ai_facebook_comment_uses_openai_compatible_response(self):
         class FakeResponse:
@@ -182,7 +147,7 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
         self.assertEqual(captured["auth"], "Bearer test-key")
         self.assertIn('"model": "test-model"', captured["body"])
-        self.assertIn("Ngắn, thường từ 4 đến 16 từ", captured["body"])
+        self.assertIn("Độ dài ưu tiên khoảng 4 đến 16 từ", captured["body"])
 
     def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
         class FakeResponse:
