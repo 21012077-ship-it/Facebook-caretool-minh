@@ -193,7 +193,24 @@ class UtilsTest(unittest.TestCase):
         self.assertEqual(captured["url"], "https://example.com/v1/chat/completions")
         self.assertEqual(captured["auth"], "Bearer test-key")
         self.assertIn('"model": "test-model"', captured["body"])
-        self.assertIn("Độ dài ưu tiên khoảng 4 đến 16 từ", captured["body"])
+        self.assertIn("một câu hoàn chỉnh từ 7 đến 25 từ", captured["body"])
+
+
+    def test_generate_ai_facebook_comment_rejects_too_short_ai_output(self):
+        class FakeResponse:
+            def read(self):
+                return b'{"choices":[{"message":{"content":"cang the"}}]}'
+
+            def close(self):
+                pass
+
+        self.assertIsNone(
+            generate_ai_facebook_comment(
+                "Bài viết có nội dung rõ nhưng AI trả lời quá ngắn.",
+                api_key="test-key",
+                requester=lambda request, timeout: FakeResponse(),
+            )
+        )
 
     def test_generate_ai_facebook_comment_rejects_spammy_ai_output(self):
         class FakeResponse:
