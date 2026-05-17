@@ -17,6 +17,7 @@ from facebook_caretool.utils import (
     is_facebook_standard_comment,
     load_json,
     normalize_ai_chat_completions_url,
+    resolve_ai_chat_completions_url,
     parse_delay,
     parse_proxy,
     save_json,
@@ -155,6 +156,57 @@ class UtilsTest(unittest.TestCase):
             normalize_ai_chat_completions_url("https://example.com/v1/chat/completions/"),
             "https://example.com/v1/chat/completions",
         )
+
+
+    def test_resolve_ai_chat_completions_url_routes_gemini_model_to_google(self):
+        self.assertEqual(
+            resolve_ai_chat_completions_url(
+                api_key="gen-lang-example",
+                model="gemini-1.5-flash",
+                base_url="https://api.openai.com/v1/chat/completions",
+            ),
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+        self.assertEqual(
+            resolve_ai_chat_completions_url(
+                api_key="test-key",
+                model="gemini-1.5-flash",
+                base_url="https://api.openai.com/v1",
+            ),
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+
+    def test_generate_ai_facebook_comment_uses_gemini_openai_endpoint(self):
+        class FakeResponse:
+            def read(self):
+                return b'{"choices":[{"message":{"content":"Cam on ban da chia se thong tin that su huu ich."}}]}'
+
+            def close(self):
+                pass
+
+        captured = {}
+
+        def requester(request, timeout):
+            captured["url"] = request.full_url
+            captured["auth"] = request.headers.get("Authorization")
+            captured["google_key"] = request.headers.get("X-goog-api-key")
+            return FakeResponse()
+
+        comment = generate_ai_facebook_comment(
+            "Bài viết chia sẻ thông tin hữu ích.",
+            api_key="gen-lang-example",
+            model="gemini-1.5-flash",
+            base_url="https://api.openai.com/v1/chat/completions",
+            requester=requester,
+        )
+
+        self.assertEqual(comment, "Cam on ban da chia se thong tin that su huu ich.")
+        self.assertEqual(
+            captured["url"],
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+        self.assertEqual(captured["auth"], "Bearer gen-lang-example")
+        self.assertEqual(captured["google_key"], "gen-lang-example")
 
     def test_generate_ai_facebook_comment_requires_configuration(self):
         with self.assertRaises(ValueError):
