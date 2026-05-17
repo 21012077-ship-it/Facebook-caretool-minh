@@ -4,8 +4,5 @@
     "export_sensitive_default": false,
     "import_overwrite_default": false,
     "comment_content": "",
-    "ai_comment_enabled": true,
-    "ai_comment_api_key": "",
-    "ai_comment_model": "gemini-1.5-flash",
-    "ai_comment_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+    "ai_comment_enabled": true
 }

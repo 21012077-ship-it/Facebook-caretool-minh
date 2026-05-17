@@ -1,11 +1,3 @@
-const fs = require('node:fs/promises');
-const path = require('node:path');
-
-const DEFAULT_COMMENT_MODEL = process.env.OPENAI_COMMENT_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const DEFAULT_VISION_MODEL = process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-const GEMINI_OPENAI_CHAT_COMPLETIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-const GEMINI_API_KEY_PREFIXES = ['AIza', 'gen-lang'];
 const SKIP_COMMENT = 'SKIP_COMMENT';
 
 const BANNED_COMMENT_PATTERNS = [
@@ -17,40 +9,6 @@ const BANNED_COMMENT_PATTERNS = [
   /vấn đề thú vị/i,
   /rất đồng tình/i,
 ];
-
-function requireApiKey() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    const error = new Error('Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.');
-    error.code = 'OPENAI_API_KEY_MISSING';
-    throw error;
-  }
-  return apiKey;
-}
-
-function normalizeChatCompletionsUrl(baseUrl) {
-  const normalized = String(baseUrl || '').trim().replace(/\/$/, '');
-  if (!normalized) return '';
-  if (normalized.endsWith('/chat/completions')) return normalized;
-  if (normalized.endsWith('/v1')) return `${normalized}/chat/completions`;
-  return normalized;
-}
-
-function isGeminiConfig({ apiKey = '', model = '', baseUrl = '' }) {
-  return (
-    GEMINI_API_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))
-    || String(model || '').trim().toLowerCase().startsWith('gemini')
-    || String(baseUrl || '').toLowerCase().includes('generativelanguage.googleapis.com')
-  );
-}
-
-function resolveChatCompletionsUrl({ apiKey = '', model = '', baseUrl = OPENAI_BASE_URL }) {
-  const normalized = normalizeChatCompletionsUrl(baseUrl || 'https://api.openai.com/v1');
-  if (isGeminiConfig({ apiKey, model, baseUrl: normalized }) && (!normalized || normalized.includes('api.openai.com'))) {
-    return GEMINI_OPENAI_CHAT_COMPLETIONS_URL;
-  }
-  return normalized;
-}
 
 function compactText(value, maxLength = 3000) {
   return String(value || '')
@@ -68,6 +26,7 @@ Nhiệm vụ:
 - Nội dung caption/post text
 - Hashtag
 - Chữ trong ảnh hoặc thumbnail video nếu có
+- Ảnh/thumbnail được đính kèm trong tin nhắn này nếu có
 
 Sau đó viết ra đúng 1 bình luận phù hợp nhất với bài đăng.
 
@@ -124,47 +83,9 @@ Dữ liệu bài viết:
 - Page/account name: ${compactText(postData.accountName, 500) || '(không lấy được)'}
 - Post text: ${compactText(postData.postText, 3500) || '(không lấy được)'}
 - Hashtags: ${(postData.hashtags || []).join(', ') || '(không có)'}
-- Image/video thumbnail text nếu có: ${compactText(postData.imageText, 2500) || '(không lấy được)'}
+- Image/video thumbnail text nếu có: ${compactText(postData.imageText, 2500) || '(chưa OCR / không lấy được chữ trong ảnh)'}
 
 Hãy trả về đúng 1 bình luận phù hợp nhất.`;
-}
-
-async function callChatCompletion({ model, messages, maxTokens = 120, temperature = 0.85 }) {
-  const apiKey = requireApiKey();
-  const endpoint = resolveChatCompletionsUrl({ apiKey, model, baseUrl: OPENAI_BASE_URL });
-  const headers = {
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-  };
-  if (endpoint.startsWith('https://generativelanguage.googleapis.com/')) {
-    headers['x-goog-api-key'] = apiKey;
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
-
-  const rawBody = await response.text();
-  let data;
-  try {
-    data = JSON.parse(rawBody);
-  } catch (_) {
-    data = { raw: rawBody };
-  }
-
-  if (!response.ok) {
-    const detail = data?.error?.message || data?.raw || rawBody || response.statusText;
-    throw new Error(`OpenAI API lỗi ${response.status}: ${detail}`);
-  }
-
-  return data?.choices?.[0]?.message?.content || '';
 }
 
 function sanitizeOneLineComment(text) {
@@ -196,71 +117,11 @@ function validateGeneratedComment(comment) {
   return { ok: true, reason: '', comment: sanitized };
 }
 
-async function generateComment(postData) {
-  const prompt = buildCommentPrompt(postData);
-  const content = await callChatCompletion({
-    model: DEFAULT_COMMENT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content:
-          'Bạn chỉ tạo đúng 1 bình luận Facebook tiếng Việt tự nhiên, bám sát ngữ cảnh bài viết. Nếu dữ liệu không đủ rõ để comment hợp lý, trả về đúng SKIP_COMMENT. Không giải thích.',
-      },
-      { role: 'user', content: prompt },
-    ],
-  });
-
-  const validation = validateGeneratedComment(content);
-  if (!validation.ok) {
-    const error = new Error(`AI không trả về comment có thể đăng: ${validation.reason}`);
-    error.code = validation.reason === 'skip' ? 'SKIP_COMMENT' : 'COMMENT_BLOCKED';
-    error.reason = validation.reason;
-    error.comment = validation.comment;
-    throw error;
-  }
-  return validation.comment;
-}
-
-async function extractTextFromImages(imagePaths) {
-  if (!imagePaths.length) {
-    return '';
-  }
-
-  const content = [
-    {
-      type: 'text',
-      text: 'Trích xuất ngắn gọn toàn bộ chữ tiếng Việt/tiếng Anh nhìn thấy trong các ảnh hoặc thumbnail video Facebook này. Nếu không thấy chữ, trả về chuỗi rỗng. Không mô tả cảnh vật.',
-    },
-  ];
-
-  for (const imagePath of imagePaths) {
-    const buffer = await fs.readFile(imagePath);
-    const ext = path.extname(imagePath).toLowerCase();
-    const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-    content.push({
-      type: 'image_url',
-      image_url: { url: `data:${mime};base64,${buffer.toString('base64')}` },
-    });
-  }
-
-  const result = await callChatCompletion({
-    model: DEFAULT_VISION_MODEL,
-    messages: [{ role: 'user', content }],
-    maxTokens: 250,
-    temperature: 0.1,
-  });
-
-  return compactText(result, 2500);
-}
-
 module.exports = {
   BANNED_COMMENT_PATTERNS,
   SKIP_COMMENT,
   buildCommentPrompt,
   compactText,
-  extractTextFromImages,
-  generateComment,
-  requireApiKey,
   sanitizeOneLineComment,
   validateGeneratedComment,
 };
