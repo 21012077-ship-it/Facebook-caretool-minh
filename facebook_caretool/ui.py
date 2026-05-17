@@ -1011,10 +1011,12 @@ class FacebookCareTool(ctk.CTk):
                         button = buttons.nth(index)
                         if not button.is_visible(timeout=500):
                             continue
+                        if not self.is_comment_with_existing_replies(button):
+                            continue
                         comment_text = self.extract_comment_text_near_reply_button(button)
                         if comment_text:
                             preview = comment_text[:140] + ("..." if len(comment_text) > 140 else "")
-                            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] 💬 Đã quét comment cần trả lời: {text}"))
+                            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] 💬 Đã quét comment có phản hồi sẵn để gửi vào ChatGPT: {text}"))
                             return comment_text
                 except Exception:
                     continue
@@ -1027,7 +1029,7 @@ class FacebookCareTool(ctk.CTk):
         if first_comment_text:
             preview = first_comment_text[:140] + ("..." if len(first_comment_text) > 140 else "")
             self.after(0, lambda n=acc_name, text=preview: self.append_live_log(
-                f"[{n}] 💬 Không thấy comment nào có nút Phản hồi/Reply; dùng comment đầu tiên: {text}"
+                f"[{n}] 💬 Không thấy comment có phản hồi sẵn; quét comment đầu tiên để gửi vào ChatGPT: {text}"
             ))
             return first_comment_text
 
@@ -1181,8 +1183,7 @@ class FacebookCareTool(ctk.CTk):
         """Chọn vị trí comment theo ưu tiên nghiệp vụ.
 
         Ưu tiên trả lời comment đã có phản hồi. Nếu không thấy comment như vậy,
-        chỉ trả lời comment gần nhất khi bài có hơn 10 comment; bài ít
-        comment hơn sẽ comment trực tiếp vào bài viết.
+        trả lời comment đầu tiên; tuyệt đối không chuyển sang comment thẳng vào bài.
         """
         reply_selectors = [
             "div[role='button'][aria-label='Phản hồi'], div[aria-label='Phản hồi']",
@@ -1190,8 +1191,6 @@ class FacebookCareTool(ctk.CTk):
             "text=Phản hồi",
             "text=Reply",
         ]
-        nearby_reply_buttons: list[Any] = []
-
         for scroll_round in range(6):
             if not self.wait_if_paused():
                 return False
@@ -1204,8 +1203,6 @@ class FacebookCareTool(ctk.CTk):
                         button = reply_buttons.nth(index)
                         if not button.is_visible():
                             continue
-
-                        nearby_reply_buttons = self.remember_nearby_reply_button(nearby_reply_buttons, button)
 
                         if not self.is_comment_with_existing_replies(button):
                             continue
@@ -1225,23 +1222,15 @@ class FacebookCareTool(ctk.CTk):
         comment_count = self.detect_post_comment_count(page)
         if comment_count is None:
             self.after(0, lambda n=acc_name: self.append_live_log(
-                f"[{n}] Không thấy comment có phản hồi; trả lời comment gần nhất đã quét được."
+                f"[{n}] Không thấy comment có phản hồi; trả lời comment đầu tiên."
             ))
         else:
             self.after(0, lambda n=acc_name, count=comment_count: self.append_live_log(
-                f"[{n}] Không thấy comment có phản hồi; bài có {count} comment, trả lời comment gần nhất đã quét được."
+                f"[{n}] Không thấy comment có phản hồi; bài có {count} comment, trả lời comment đầu tiên."
             ))
 
-        for button in reversed(nearby_reply_buttons):
-            try:
-                if self.click_reply_button(button, acc_name, "Đã bấm Phản hồi vào comment gần nhất."):
-                    return True
-                return False
-            except Exception:
-                continue
-
         self.after(0, lambda n=acc_name: self.append_live_log(
-            f"[{n}] Không thấy nút Phản hồi/Reply sẵn; thử phản hồi ở comment đầu tiên."
+            f"[{n}] Không thấy comment có phản hồi sẵn; thử phản hồi ở comment đầu tiên."
         ))
         return self.click_first_comment_reply_button(page, acc_name)
 

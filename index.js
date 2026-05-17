@@ -454,6 +454,20 @@ async function clickReplyTarget(page, postElement, target) {
   throw new Error('Đã tìm thấy comment đầu tiên nhưng không hiện nút Phản hồi/Reply/Trả lời để bấm.');
 }
 
+async function isReplyButtonForCommentWithExistingReplies(button) {
+  return button.evaluate((node) => {
+    const threadedReplyText = /(xem|view|ẩn|hide|more|thêm|previous|trước|khác|other).{0,80}(phản hồi|repl(?:y|ies)|trả lời|câu trả lời)|\b\d+\s+(phản hồi|repl(?:y|ies)|trả lời|câu trả lời)\b/i;
+    for (let current = node; current; current = current.parentElement) {
+      const text = (current.innerText || current.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text && !/^(phản hồi|reply|trả lời)$/i.test(text) && threadedReplyText.test(text)) {
+        return true;
+      }
+      if (current.getAttribute && current.getAttribute('role') === 'article') break;
+    }
+    return false;
+  }).catch(() => false);
+}
+
 async function findReplyTargetComment(postElement) {
   const selectors = buildReplyActionSelectors();
   const seen = new Set();
@@ -471,9 +485,10 @@ async function findReplyTargetComment(postElement) {
       }).catch(() => `${selector}:${i}`);
       if (seen.has(key)) continue;
       seen.add(key);
+      if (!(await isReplyButtonForCommentWithExistingReplies(button))) continue;
       const commentText = sanitizeScannedCommentText(await extractReplyCommentText(button).catch(() => ''));
       if (!commentText) continue;
-      candidates.push({ button, commentText });
+      candidates.push({ button, commentText, hasExistingReplies: true });
     }
   }
 
@@ -488,39 +503,34 @@ function sanitizeScannedCommentText(text) {
     .slice(0, 1200);
 }
 
-async function scanReplyTargetComment(page, postElement) {
+async function scanReplyTarget(page, postElement) {
   log('🔎 Bắt đầu quét comment cần trả lời...');
   for (let round = 0; round < 5; round += 1) {
     const target = await findReplyTargetComment(postElement);
     if (target) {
-      log(`💬 Đã quét comment cần trả lời: ${target.commentText.slice(0, 140)}${target.commentText.length > 140 ? '...' : ''}`);
-      return target.commentText;
+      log(`💬 Đã quét comment có phản hồi sẵn để gửi vào ChatGPT: ${target.commentText.slice(0, 140)}${target.commentText.length > 140 ? '...' : ''}`);
+      return target;
     }
     await page.mouse.wheel(0, 650).catch(() => null);
     await page.waitForTimeout(900);
   }
+
   const firstComment = await findFirstVisibleComment(postElement);
   if (firstComment) {
-    log(`💬 Không thấy comment nào có nút Phản hồi/Reply; dùng comment đầu tiên: ${firstComment.commentText.slice(0, 140)}${firstComment.commentText.length > 140 ? '...' : ''}`);
-    return firstComment.commentText;
+    log(`💬 Không thấy comment có phản hồi sẵn; quét comment đầu tiên để gửi vào ChatGPT: ${firstComment.commentText.slice(0, 140)}${firstComment.commentText.length > 140 ? '...' : ''}`);
+    return firstComment;
   }
 
   log('⚠️ Không quét được comment nào để trả lời.');
-  return '';
+  return null;
 }
 
-async function findReplyBox(page, postElement) {
-  const target = await findReplyTargetComment(postElement) || await findFirstVisibleComment(postElement);
-  if (!target) {
-    throw new Error('Không tìm thấy comment để trả lời.');
-  }
+async function scanReplyTargetComment(page, postElement) {
+  const target = await scanReplyTarget(page, postElement);
+  return target ? target.commentText : '';
+}
 
-  if (target.isFirstCommentFallback) {
-    log('↪️ Không có nút Reply sẵn; thử phản hồi ở comment đầu tiên.');
-  }
-  await clickReplyTarget(page, postElement, target);
-  await page.waitForTimeout(1000);
-
+async function findVisibleReplyBox(postElement) {
   const selectors = [
     '[contenteditable="true"][role="textbox"][aria-label*="reply" i]',
     '[contenteditable="true"][role="textbox"][aria-label*="phản hồi" i]',
@@ -535,6 +545,20 @@ async function findReplyBox(page, postElement) {
     if (await box.isVisible({ timeout: 2000 }).catch(() => false)) return box;
   }
   throw new Error('Không tìm thấy ô nhập phản hồi sau khi bấm Reply.');
+}
+
+async function findReplyBox(page, postElement, selectedTarget = null) {
+  const target = selectedTarget || await findReplyTargetComment(postElement) || await findFirstVisibleComment(postElement);
+  if (!target) {
+    throw new Error('Không tìm thấy comment để trả lời.');
+  }
+
+  if (target.isFirstCommentFallback) {
+    log('↪️ Không có nút Reply sẵn; thử phản hồi ở comment đầu tiên.');
+  }
+  await clickReplyTarget(page, postElement, target);
+  await page.waitForTimeout(1000);
+  return findVisibleReplyBox(postElement);
 }
 
 async function findCommentBox(page, postElement) {
@@ -604,9 +628,23 @@ async function typeAndPost(page, postElement, comment) {
 
 
 
-async function typeAndReply(page, postElement, comment) {
+async function typeAndReply(page, postElement, comment, selectedTarget = null) {
   log('✍️ Đang nhập reply vào comment đã quét...');
-  const box = await findReplyBox(page, postElement);
+  let box;
+
+  try {
+    box = await findReplyBox(page, postElement, selectedTarget);
+  } catch (error) {
+    log(`⚠️ Không mở được ô phản hồi của comment đã quét (${error.message}); thử phản hồi comment đầu tiên, không comment thẳng vào bài.`);
+    const firstComment = await findFirstVisibleComment(postElement);
+    if (!firstComment) {
+      throw new Error('Không tìm thấy comment đầu tiên để phản hồi.');
+    }
+    await clickReplyTarget(page, postElement, firstComment);
+    await page.waitForTimeout(1000);
+    box = await findVisibleReplyBox(postElement);
+  }
+
   await humanDelay(500, 1400);
   await box.click({ timeout: 10000 });
   await humanDelay(300, 900);
@@ -774,11 +812,12 @@ async function main() {
     await page.waitForTimeout(3000);
 
     const { postElement, postData } = await scrapePostContext(page);
-    const targetComment = await scanReplyTargetComment(page, postElement);
-    if (!targetComment) {
+    const replyTarget = await scanReplyTarget(page, postElement);
+    if (!replyTarget) {
       return;
     }
 
+    const targetComment = replyTarget.commentText;
     const comment = await generateCommentWithChatGPT(context, postData, targetComment);
     if (!comment) {
       return;
@@ -792,7 +831,7 @@ async function main() {
       return;
     }
 
-    await typeAndReply(page, postElement, comment);
+    await typeAndReply(page, postElement, comment, replyTarget);
   } finally {
     await context.close().catch(() => null);
   }
@@ -809,6 +848,7 @@ module.exports = {
   extractReplyCommentText,
   findReplyTargetComment,
   findFirstVisibleComment,
+  scanReplyTarget,
   scanReplyTargetComment,
   scrapePostContext,
 };
