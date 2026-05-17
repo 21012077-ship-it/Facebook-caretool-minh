@@ -10,7 +10,7 @@ from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
 from .storage import JsonStorage
-from .utils import build_comment_payloads, build_contextual_facebook_comment, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, spin_content
+from .utils import build_comment_payloads, generate_ai_facebook_comment, generate_totp_code, load_json, random_delay, save_json, spin_content
 import json
 import os
 import threading
@@ -20,7 +20,6 @@ from datetime import datetime
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = ""
-AI_COMMENT_EMPTY_FALLBACK = "Mình thấy nội dung này có vài điểm đáng suy nghĩ và khá dễ liên hệ với thực tế."
 ACCOUNT_RENDER_BATCH_SIZE = 60
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
@@ -459,7 +458,7 @@ class FacebookCareTool(ctk.CTk):
             text=(
 
                 "Nên để trống ô này và bật tự tạo comment: tool sẽ quét bài viết rồi tự nghĩ câu mới bám đúng nội dung bài. "
-                "Chỉ nhập fallback nếu muốn có câu dự phòng khi không đọc được nội dung."
+                "Có thể nhập comment thủ công; nếu để trống và bật tự tạo theo bài thì bắt buộc cần API key AI."
 
             ),
             text_color="#a7f3d0",
@@ -518,7 +517,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(
             right_panel,
 
-            text="Khi bật: tool đọc nội dung bài/comment rồi ưu tiên gọi AI để tự nghĩ comment mới, bám ý cụ thể trong bài. Nếu AI lỗi sẽ tự rút ý chính từ bài để viết câu dự phòng; không đảm bảo Facebook luôn hiển thị comment.",
+            text="Khi bật: tool chỉ đọc nội dung bài post chính rồi gọi AI để tự nghĩ comment mới, bám ý cụ thể trong bài. Nếu thiếu API key hoặc AI không trả về comment hợp lệ thì bỏ qua link; không tự bịa fallback.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -661,7 +660,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="AI tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Nhập API key/model OpenAI-compatible để tool quét bài rồi tự nghĩ comment mới, tự nhiên và bám nội dung cụ thể. Nếu thiếu key hoặc API lỗi, tool sẽ tự rút ý chính từ bài để viết câu dự phòng.",
+            text="Nhập API key/model OpenAI-compatible để tool quét bài rồi tự nghĩ comment mới, tự nhiên và bám nội dung cụ thể. Nếu thiếu key hoặc API lỗi, tool sẽ bỏ qua link và không tạo fallback.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
@@ -780,7 +779,7 @@ class FacebookCareTool(ctk.CTk):
             messagebox.showwarning(
                 "Thông báo",
                 "Muốn để trống nội dung comment thì hãy bật chế độ tự tạo comment theo nội dung bài. "
-                "Tool sẽ quét bài viết rồi tự sinh comment phù hợp; nếu có API key AI thì ưu tiên gọi AI.",
+                "Tool sẽ quét bài viết rồi gửi vào AI để tự sinh comment phù hợp; thiếu API key thì bỏ qua link.",
             )
             return
         try:
@@ -861,7 +860,7 @@ class FacebookCareTool(ctk.CTk):
 
     def scan_facebook_content_before_comment(self, page, acc_name):
         """Lướt và đọc nhanh nội dung bài/comment hiện có trước khi tạo comment."""
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Đang quét nội dung Facebook để tạo comment phù hợp..."))
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Đang quét nội dung bài Facebook..."))
 
         see_more_selectors = [
             "text=Xem thêm",
@@ -973,15 +972,22 @@ class FacebookCareTool(ctk.CTk):
                 """
             )
         except Exception as exc:
-            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không đọc được nội dung bài, sẽ dùng mẫu dự phòng: {err[:60]}..."))
+            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không đọc được nội dung bài: {err[:60]}..."))
             return ""
 
         if scanned_text:
             preview = scanned_text[:120] + ("..." if len(scanned_text) > 120 else "")
-            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] ✅ Đã quét nội dung: {text}"))
+            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(
+                f"[{n}] ===== POST CONTEXT =====\n"
+                f"Account: (đã gộp trong text nếu lấy được)\n"
+                f"Post text: {text}\n"
+                f"Hashtags: (đã gộp trong text nếu có)\n"
+                f"Image text: (desktop chưa OCR riêng)\n"
+                f"========================"
+            ))
             return scanned_text
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không thấy text rõ ràng sau khi quét, sẽ dùng mẫu dự phòng."))
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không lấy được caption rõ ràng trong article chính."))
         return ""
 
     def click_existing_comment_reply_button(self, page, acc_name):
@@ -1364,21 +1370,34 @@ class FacebookCareTool(ctk.CTk):
         }
 
     def build_comment_from_scanned_content(self, scanned_post_text, fallback_content, acc_name, ai_comment_settings):
-        if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
+        if not ai_comment_settings.get("enabled"):
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ AI đang tắt, bỏ qua link vì không thể tạo comment bằng AI."))
+            return None
+        if not ai_comment_settings.get("api_key"):
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."))
+            return None
+
+        try:
             ai_comment = generate_ai_facebook_comment(
                 scanned_post_text,
-                fallback_content,
+                "",
                 api_key=ai_comment_settings.get("api_key", ""),
                 model=ai_comment_settings.get("model", "gpt-4o-mini"),
                 base_url=ai_comment_settings.get("base_url", "https://api.openai.com/v1/chat/completions"),
             )
-            if ai_comment:
-                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🤖 AI đã đọc bài và tự nghĩ comment phù hợp."))
-                return ai_comment
+        except ValueError as exc:
+            self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ {err}"))
+            return None
 
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, tự rút ý trong bài để viết câu dự phòng."))
+        if ai_comment == "SKIP_COMMENT":
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI trả về SKIP_COMMENT vì dữ liệu bài viết không đủ rõ, bỏ qua bài."))
+            return None
+        if ai_comment:
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Đang gửi ngữ cảnh bài viết vào AI để tạo comment..."))
+            return ai_comment
 
-        return build_contextual_facebook_comment(scanned_post_text, fallback_content)
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ AI chưa tạo được comment hợp lệ, bỏ qua bài."))
+        return None
 
     def run_comment_task(
         self,
@@ -1399,7 +1418,7 @@ class FacebookCareTool(ctk.CTk):
         comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
 
         if auto_contextual_mode:
-            comment_payloads = build_comment_payloads(AI_COMMENT_EMPTY_FALLBACK, comment_image_paths)
+            comment_payloads = [{"text": "", "media_path": comment_image_paths[0] if comment_image_paths else ""}]
 
             if ai_comment_settings.get("enabled") and ai_comment_settings.get("api_key"):
                 masked_key = ai_comment_settings.get("api_key", "")[:7] + "..."
@@ -1408,12 +1427,9 @@ class FacebookCareTool(ctk.CTk):
                     f"({ai_comment_settings.get('model')}, key {masked_key}) để tự nghĩ comment phù hợp."
                 )
             elif ai_comment_settings.get("enabled"):
-                log_message = (
-                    "🧠 Đang chạy chế độ tự tạo comment theo bài viết nhưng CHƯA có API key AI; "
-                    "tool sẽ rút ý chính bằng fallback an toàn. Nhập OPENAI_API_KEY hoặc lưu API key ở Cài đặt để dùng AI thật."
-                )
+                log_message = "❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."
             else:
-                log_message = "🧠 AI đang tắt; tool sẽ quét nội dung rồi tự rút ý chính để viết comment dự phòng."
+                log_message = "❌ AI đang tắt, bỏ qua link vì không thể tạo comment bằng AI."
 
             self.after(0, lambda msg=log_message: self.append_live_log(msg))
 
@@ -1433,7 +1449,7 @@ class FacebookCareTool(ctk.CTk):
             self.after(
                 0,
                 lambda: self.append_live_log(
-                    "ℹ️ Chưa cấu hình API key AI, tool vẫn tự tạo comment theo ngữ cảnh bằng fallback an toàn."
+                    "❌ Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI."
                 ),
             )
 
@@ -1508,10 +1524,16 @@ class FacebookCareTool(ctk.CTk):
                                 acc_name,
                                 ai_comment_settings,
                             )
+                            if not final_content:
+                                delay_sec = self.get_pause_seconds(delay_range)
+                                self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Bỏ qua link, nghỉ {int(d)} giây trước link tiếp theo..."))
+                                if not self.interruptible_sleep(delay_sec):
+                                    break
+                                continue
                             self.after(
                                 0,
                                 lambda n=acc_name, text=final_content: self.append_live_log(
-                                    f"[{n}] 💬 Comment phù hợp đã chọn: {text}"
+                                    f"[{n}] 💬 Comment AI đề xuất: {text}"
                                 ),
                             )
 
@@ -1527,17 +1549,10 @@ class FacebookCareTool(ctk.CTk):
 
                         comment_success = False
                         try:
-                            is_reply_mode = self.click_existing_comment_reply_button(page, acc_name)
-                            if is_reply_mode:
-                                if not self.interruptible_sleep(random.uniform(1, 2)):
-                                    break
-                                comment_box = self.find_reply_comment_box(page)
-                                action_name = "phản hồi"
-                            else:
-                                comment_box = self.focus_post_comment_box(page, acc_name)
-                                action_name = "comment"
-                                if comment_box is None:
-                                    break
+                            comment_box = self.focus_post_comment_box(page, acc_name)
+                            action_name = "comment"
+                            if comment_box is None:
+                                break
 
                             if not self.type_and_submit_comment(
                                 page,
@@ -1550,13 +1565,10 @@ class FacebookCareTool(ctk.CTk):
                                 break
 
                             comment_success = True
-                            if is_reply_mode:
-                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Phản hồi comment thành công!"))
-                            else:
-                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Comment thẳng vào bài thành công!"))
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã đăng comment vào bài post thành công."))
 
                         except Exception as e:
-                            self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment/phản hồi. {err[:80]}"))
+                            self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment vào bài post. {err[:80]}"))
 
                         delay_sec = self.get_pause_seconds(delay_range)
                         if comment_success:

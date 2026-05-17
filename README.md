@@ -9,7 +9,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 - Quản lý danh sách account với trạng thái live/checkpoint/die, proxy, ghi chú và thời điểm tương tác.
 - Chạy tác vụ nuôi tài khoản qua Playwright với cookie/proxy/user-agent riêng, hỗ trợ HTTP/HTTPS/SOCKS4/SOCKS5.
 - Nuôi thông minh theo từng account: tự gợi ý warmup/cân bằng/ưu tiên Reels/ưu tiên Newsfeed/nghỉ dựa trên trạng thái, ghi chú và lịch sử nuôi.
-- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét bài và ưu tiên gọi AI tạo comment theo từng bài; nếu thiếu API key thì dùng fallback an toàn.
+- Campaign comment theo danh sách URL, có thể để trống nội dung để tool quét đúng bài post chính và bắt buộc gọi AI tạo comment theo từng bài; nếu thiếu API key thì bỏ qua link, không sinh fallback.
 
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
@@ -63,7 +63,7 @@ Trong tab **Comment**, nếu muốn dùng AI thật để tự nghĩ comment the
 1. Vào **Cài đặt → AI tạo comment**, bật **Bật AI tự nghĩ comment theo bài viết**.
 2. Nhập API key OpenAI-compatible, model và endpoint chat completions, rồi bấm **Lưu cài đặt AI**. Có thể dùng biến môi trường `OPENAI_API_KEY` thay cho việc lưu key trong app.
 3. Ở màn **Comment**, bật **Tự tạo comment theo nội dung bài** và nên để trống ô **Nội dung Comment / Fallback** để chạy chế độ AI-only.
-4. Khi campaign chạy, log sẽ hiện model/key rút gọn nếu đang gọi AI thật; nếu chưa có key, log sẽ báo rõ là đang dùng fallback tự rút ý chứ không phải AI API.
+4. Khi campaign chạy, log sẽ hiện model/key rút gọn nếu đang gọi AI thật; nếu chưa có key, log sẽ báo rõ “Thiếu OPENAI_API_KEY, bỏ qua link vì không thể tạo comment bằng AI.”
 
 ## CLI tự động tạo bình luận Facebook bằng AI
 
