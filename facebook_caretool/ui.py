@@ -1043,6 +1043,7 @@ class FacebookCareTool(ctk.CTk):
                     const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
                     const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
                     const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+                    const threadedReplyNoise = /^(?:(?:xem|view|see|ẩn|hide)\s*(?:tất cả|all)?\s*)?(?:\d+[.,]?\d*\s*)?(?:phản hồi|repl(?:y|ies)|trả lời|câu trả lời)(?:\s*(?:trước|older|mới hơn|newer))?$/i;
                     const isVisible = (element) => {
                         if (!(element instanceof HTMLElement)) return false;
                         const rect = element.getBoundingClientRect();
@@ -1052,7 +1053,7 @@ class FacebookCareTool(ctk.CTk):
                     const cleanLines = (text) => String(text || '')
                         .split(/\n+/)
                         .map(normalize)
-                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line))
+                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line) && !threadedReplyNoise.test(line))
                         .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies))$/i.test(line));
                     let node = button.parentElement;
                     let best = '';
@@ -1087,6 +1088,7 @@ class FacebookCareTool(ctk.CTk):
                     const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
                     const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
                     const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+                    const threadedReplyNoise = /^(?:(?:xem|view|see|ẩn|hide)\s*(?:tất cả|all)?\s*)?(?:\d+[.,]?\d*\s*)?(?:phản hồi|repl(?:y|ies)|trả lời|câu trả lời)(?:\s*(?:trước|older|mới hơn|newer))?$/i;
                     const isVisible = (element) => {
                         if (!(element instanceof HTMLElement)) return false;
                         const rect = element.getBoundingClientRect();
@@ -1096,7 +1098,7 @@ class FacebookCareTool(ctk.CTk):
                     const cleanLines = (text) => String(text || '')
                         .split(/\n+/)
                         .map(normalize)
-                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line))
+                        .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line) && !threadedReplyNoise.test(line))
                         .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies)|bình luận|comments?)$/i.test(line));
                     const extractText = (root) => {
                         const textNodes = Array.from(root.querySelectorAll('div[dir="auto"], span[dir="auto"]'))
