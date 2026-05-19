@@ -510,7 +510,6 @@ class FacebookCareTool(ctk.CTk):
         self.delay_cmt_input = create_setting_row(right_panel, "Nghỉ giữa mỗi comment (giây):", "60-120")
         self.limit_cmt_input = create_setting_row(right_panel, "Giới hạn comment / tài khoản:", "5")
         self.comment_parallel_input = create_setting_row(right_panel, "Số tab chạy song song:", "1")
-
         self.like_before_cmt_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(right_panel, text="Tự động thả Like trước khi Comment", variable=self.like_before_cmt_var).pack(anchor="w", padx=20, pady=(10, 4))
 
@@ -1709,6 +1708,12 @@ class FacebookCareTool(ctk.CTk):
 
                     # KIỂM TRA & AUTO ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE
                     self.ensure_login(context, page, account)
+                    account_profile_url = self.resolve_account_profile_url(account)
+                    if account_profile_url:
+                        self.after(0, lambda n=acc_name, u=account_profile_url: self.append_live_log(f"[{n}] 🧭 Mở profile/fanpage của chính tài khoản trước khi comment: {u}"))
+                        self.safe_goto(page, account_profile_url, account=account)
+                        if not self.interruptible_sleep(random.uniform(3, 6)):
+                            return
 
                     for url in acc_urls:
                         if not self.wait_if_paused():
@@ -2684,6 +2689,16 @@ class FacebookCareTool(ctk.CTk):
             account=account,
             fallback_urls=["https://facebook.com/", "https://m.facebook.com/"]
         )
+
+    def resolve_account_profile_url(self, account):
+        raw_uid = str((account or {}).get("uid") or "").strip()
+        if not raw_uid:
+            return "https://www.facebook.com/me/"
+        if raw_uid.startswith("http://") or raw_uid.startswith("https://"):
+            return raw_uid
+        if raw_uid.isdigit():
+            return f"https://www.facebook.com/profile.php?id={raw_uid}"
+        return f"https://www.facebook.com/{raw_uid}"
 
     # --- HÀM MỚI: KIỂM TRA VÀ TỰ ĐỘNG ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE ---
     def ensure_login(self, context, page, account):
