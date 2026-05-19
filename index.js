@@ -693,23 +693,55 @@ async function ensureChatGPTLoggedIn(page) {
 async function attachImagesToChatGPT(chatPage, imagePaths) {
   if (!imagePaths.length) return;
 
-  const existingInputs = await chatPage.locator('input[type="file"]').count().catch(() => 0);
-  if (!existingInputs) {
-    const attachButton = chatPage.locator('[aria-label*="Attach" i], [aria-label*="Tải" i], [aria-label*="Đính" i], button:has-text("+")').first();
-    if (await attachButton.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await attachButton.click({ timeout: 3000 }).catch(() => null);
-      await chatPage.waitForTimeout(700);
+  const fileInputSelector = [
+    'input[type="file"]',
+    'input[type="file"][accept*="image" i]',
+  ].join(', ');
+
+  const setFilesViaInput = async () => {
+    const input = chatPage.locator(fileInputSelector).last();
+    if (await input.count().catch(() => 0)) {
+      await input.setInputFiles(imagePaths, { timeout: 20000 });
+      return true;
+    }
+    return false;
+  };
+
+  if (await setFilesViaInput()) {
+    log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
+    await chatPage.waitForTimeout(2500);
+    return;
+  }
+
+  const attachButtonSelector = [
+    '[data-testid*="composer" i][data-testid*="plus" i]',
+    'button[aria-label*="Attach" i]',
+    'button[aria-label*="upload" i]',
+    'button[aria-label*="Tải" i]',
+    'button[aria-label*="Đính" i]',
+    'button:has-text("+")',
+  ].join(', ');
+
+  const attachButton = chatPage.locator(attachButtonSelector).first();
+  if (await attachButton.isVisible({ timeout: 2500 }).catch(() => false)) {
+    const chooserPromise = chatPage.waitForEvent('filechooser', { timeout: 4000 }).catch(() => null);
+    await attachButton.click({ timeout: 4000 }).catch(() => null);
+    const chooser = await chooserPromise;
+    if (chooser) {
+      await chooser.setFiles(imagePaths);
+      log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
+      await chatPage.waitForTimeout(2500);
+      return;
     }
   }
 
-  const fileInput = chatPage.locator('input[type="file"]').last();
-  if (await fileInput.count().catch(() => 0)) {
-    await fileInput.setInputFiles(imagePaths, { timeout: 15000 });
+  if (await setFilesViaInput()) {
     log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
     await chatPage.waitForTimeout(2500);
-  } else {
-    log('⚠️ Không tìm thấy nút/file input để đính kèm ảnh vào ChatGPT; prompt vẫn ghi rõ ảnh chưa OCR.');
+    return;
   }
+
+  log('⚠️ Không tìm thấy nút/file input để đính kèm ảnh vào ChatGPT; prompt vẫn ghi rõ ảnh chưa OCR.');
 }
 
 async function submitChatGPTPrompt(chatPage, prompt) {
