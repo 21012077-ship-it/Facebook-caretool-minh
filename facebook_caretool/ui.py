@@ -1541,7 +1541,7 @@ class FacebookCareTool(ctk.CTk):
         prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
         chat_page = facebook_page.context.new_page()
         try:
-            chat_page.goto("https://chatgpt.com/", wait_until="domcontentloaded", timeout=90000)
+            chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
             try:
                 chat_page.wait_for_load_state("networkidle", timeout=25000)
             except Exception:

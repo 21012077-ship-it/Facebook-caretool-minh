@@ -13,7 +13,7 @@ function log(message) {
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT`);
+  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT`);
 }
 
 function parseArgs(argv) {
@@ -679,7 +679,7 @@ async function findChatGPTComposer(page) {
 }
 
 async function ensureChatGPTLoggedIn(page) {
-  await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto('https://chatgpt.com/?temporary-chat=true', { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForLoadState('networkidle', { timeout: 25000 }).catch(() => null);
   await page.waitForTimeout(3000);
 
