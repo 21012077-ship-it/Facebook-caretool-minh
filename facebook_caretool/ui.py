@@ -55,6 +55,7 @@ class FacebookCareTool(ctk.CTk):
         self.selected_index = None
         self.comment_selected_accounts = set()
         self.comment_image_paths = [] # Lưu danh sách đường dẫn ảnh/video ghép đi kèm từng comment
+        self.scanned_post_image_paths = []
         self.task_pause_event = threading.Event()
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
@@ -1006,6 +1007,8 @@ class FacebookCareTool(ctk.CTk):
             self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ⚠️ Không đọc được nội dung bài: {err[:60]}..."))
             return ""
 
+        self.scanned_post_image_paths = self.capture_scanned_post_images(page, acc_name)
+
         if scanned_text:
             preview = scanned_text[:120] + ("..." if len(scanned_text) > 120 else "")
             self.after(0, lambda n=acc_name, text=preview: self.append_live_log(
@@ -1020,6 +1023,42 @@ class FacebookCareTool(ctk.CTk):
 
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không lấy được caption rõ ràng trong article chính."))
         return ""
+
+    def capture_scanned_post_images(self, page, acc_name):
+        """Chụp nhanh ảnh/thumbnail trong vùng bài post để gửi kèm ChatGPT."""
+        output_dir = os.path.join("tmp_scanned_media")
+        os.makedirs(output_dir, exist_ok=True)
+        image_paths = []
+        selectors = [
+            "div[role='dialog'] img",
+            "div[role='dialog'] video",
+            "div[role='article'] img",
+            "div[role='article'] video",
+        ]
+        for selector in selectors:
+            try:
+                media_nodes = page.locator(selector)
+                capture_count = min(media_nodes.count(), 3)
+                for index in range(capture_count):
+                    node = media_nodes.nth(index)
+                    if not node.is_visible():
+                        continue
+                    try:
+                        box = node.bounding_box()
+                        if not box or box.get("width", 0) < 120 or box.get("height", 0) < 120:
+                            continue
+                        path = os.path.join(output_dir, f"post-media-{int(time.time() * 1000)}-{index}.png")
+                        node.screenshot(path=path, timeout=5000)
+                        image_paths.append(path)
+                    except Exception:
+                        continue
+                if image_paths:
+                    break
+            except Exception:
+                continue
+        if image_paths:
+            self.after(0, lambda n=acc_name, count=len(image_paths): self.append_live_log(f"[{n}] 📎 Đã chụp {count} ảnh/thumbnail bài viết để gửi kèm ChatGPT."))
+        return image_paths
 
     def scan_comment_to_reply(self, page, acc_name):
         """Quét comment hiện có để ChatGPT viết reply bám cả bài viết và comment đó."""
@@ -1670,6 +1709,8 @@ class FacebookCareTool(ctk.CTk):
             if composer is None:
                 raise RuntimeError("Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong browser/cookie profile rồi chạy lại.")
 
+            self.attach_images_to_chatgpt(chat_page, self.scanned_post_image_paths, acc_name)
+
             assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
             try:
                 before_count = chat_page.locator(assistant_selector).count()
@@ -1727,6 +1768,29 @@ class FacebookCareTool(ctk.CTk):
                 chat_page.close()
             except Exception:
                 pass
+
+    def attach_images_to_chatgpt(self, chat_page, image_paths, acc_name):
+        valid_paths = [path for path in (image_paths or []) if os.path.exists(path)]
+        if not valid_paths:
+            return
+        file_selectors = [
+            "input[type='file'][accept*='image' i]",
+            "input[type='file'][multiple]",
+        ]
+        for selector in file_selectors:
+            try:
+                nodes = chat_page.locator(selector)
+                for index in range(min(nodes.count(), 3)):
+                    file_input = nodes.nth(index)
+                    try:
+                        file_input.set_input_files(valid_paths, timeout=10000)
+                        self.after(0, lambda n=acc_name, count=len(valid_paths): self.append_live_log(f"[{n}] 📎 Đã đính kèm {count} ảnh vào ChatGPT."))
+                        return
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không tìm thấy ô tải file ảnh trên ChatGPT, chỉ gửi dữ liệu chữ đã quét."))
 
     def run_comment_task(
         self,
