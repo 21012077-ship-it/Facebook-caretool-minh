@@ -546,6 +546,20 @@ class FacebookCareTool(ctk.CTk):
         self.comment_pause_button.pack(side="left", fill="x", expand=True, padx=(0, 4))
         ctk.CTkButton(comment_control_row, text="⏹ Dừng", height=40, fg_color="#991b1b", hover_color="#7f1d1d", command=self.stop_task).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
+        self.comment_stats = {
+            "total_links": 0,
+            "success": 0,
+            "failed": 0,
+        }
+        self.comment_stats_label = ctk.CTkLabel(
+            right_panel,
+            text="Link đã dán: 0\nComment thành công: 0\nComment thất bại: 0",
+            justify="left",
+            anchor="w",
+            text_color="#a7f3d0",
+        )
+        self.comment_stats_label.pack(fill="x", padx=20, pady=(10, 0))
+
     # --- MÀN HÌNH 3: TRÌNH DUYỆT ---
     def build_view_browser(self):
         self.view_browser.grid_columnconfigure(0, weight=1)
@@ -763,6 +777,7 @@ class FacebookCareTool(ctk.CTk):
         if not urls:
             messagebox.showwarning("Thông báo", "Vui lòng dán ít nhất 1 link bài viết Facebook hợp lệ!")
             return
+        self.update_comment_stats(total_links=len(urls), success=0, failed=0)
 
         raw_content = self.comment_content.get("1.0", "end-1c").strip()
         self.save_comment_content()
@@ -816,6 +831,24 @@ class FacebookCareTool(ctk.CTk):
             ),
             daemon=True
         ).start()
+
+    def update_comment_stats(self, total_links=None, success=None, failed=None):
+        if not hasattr(self, "comment_stats"):
+            return
+        if total_links is not None:
+            self.comment_stats["total_links"] = max(0, int(total_links))
+        if success is not None:
+            self.comment_stats["success"] = max(0, int(success))
+        if failed is not None:
+            self.comment_stats["failed"] = max(0, int(failed))
+        if hasattr(self, "comment_stats_label"):
+            self.comment_stats_label.configure(
+                text=(
+                    f"Link đã dán: {self.comment_stats['total_links']}\n"
+                    f"Comment thành công: {self.comment_stats['success']}\n"
+                    f"Comment thất bại: {self.comment_stats['failed']}"
+                )
+            )
 
     def browse_during_comment_pause(self, page, account, seconds):
         account_name = account.get("name", "")
@@ -1680,6 +1713,9 @@ class FacebookCareTool(ctk.CTk):
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
         ai_comment_settings = self.get_ai_comment_settings()
         auto_contextual_mode = scan_before_comment and not (raw_content or "").strip()
+        stats_lock = threading.Lock()
+        success_count = 0
+        failed_count = 0
 
         comment_payloads = build_comment_payloads(raw_content, comment_image_paths)
 
@@ -1781,6 +1817,9 @@ class FacebookCareTool(ctk.CTk):
                             if target_comment_text is None:
                                 break
                             if not target_comment_text:
+                                with stats_lock:
+                                    failed_count += 1
+                                    self.after(0, lambda s=success_count, f=failed_count: self.update_comment_stats(success=s, failed=f))
                                 delay_sec = self.get_pause_seconds(delay_range)
                                 self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Bỏ qua link vì chưa quét được comment cần trả lời, nghỉ {int(d)} giây trước link tiếp theo..."))
                                 if not self.interruptible_sleep(delay_sec):
@@ -1795,6 +1834,9 @@ class FacebookCareTool(ctk.CTk):
                                 target_comment_text,
                             )
                             if not final_content:
+                                with stats_lock:
+                                    failed_count += 1
+                                    self.after(0, lambda s=success_count, f=failed_count: self.update_comment_stats(success=s, failed=f))
                                 delay_sec = self.get_pause_seconds(delay_range)
                                 self.after(0, lambda n=acc_name, d=delay_sec: self.append_live_log(f"[{n}] ⏳ Bỏ qua link, nghỉ {int(d)} giây trước link tiếp theo..."))
                                 if not self.interruptible_sleep(delay_sec):
@@ -1841,9 +1883,15 @@ class FacebookCareTool(ctk.CTk):
                                 break
 
                             comment_success = True
+                            with stats_lock:
+                                success_count += 1
+                                self.after(0, lambda s=success_count, f=failed_count: self.update_comment_stats(success=s, failed=f))
                             self.after(0, lambda n=acc_name, action=action_name: self.append_live_log(f"[{n}] ✅ Đã đăng {action} thành công."))
 
                         except Exception as e:
+                            with stats_lock:
+                                failed_count += 1
+                                self.after(0, lambda s=success_count, f=failed_count: self.update_comment_stats(success=s, failed=f))
                             self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment vào bài post. {err[:80]}"))
 
                         delay_sec = self.get_pause_seconds(delay_range)
