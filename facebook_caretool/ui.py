@@ -907,14 +907,14 @@ class FacebookCareTool(ctk.CTk):
             except Exception:
                 continue
 
-        for scroll_round in range(3):
+        for scroll_round in range(2):
             if not self.wait_if_paused():
                 return None
             try:
-                page.mouse.wheel(0, 300 if scroll_round < 2 else -200)
+                page.mouse.wheel(0, 320 if scroll_round == 0 else -180)
             except Exception:
                 pass
-            if not self.interruptible_sleep(random.uniform(1.0, 1.8)):
+            if not self.interruptible_sleep(random.uniform(0.35, 0.75)):
                 return None
 
         # --- LOGIC QUÉT BÀI MỚI: ÉP BUỘC ĐỌC TRONG POPUP ---
@@ -1024,37 +1024,67 @@ class FacebookCareTool(ctk.CTk):
     def scan_comment_to_reply(self, page, acc_name):
         """Quét comment hiện có để ChatGPT viết reply bám cả bài viết và comment đó."""
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🔎 Bắt đầu quét comment cần trả lời..."))
-        reply_selectors = [
-            "div[role='button']:has-text('Phản hồi')",
-            "div[role='button']:has-text('Reply')",
-            "span:has-text('Phản hồi')",
-            "span:has-text('Reply')",
-            "text=Phản hồi",
-            "text=Reply",
-        ]
 
-        for scroll_round in range(5):
+        for scroll_round in range(3):
             if not self.wait_if_paused():
                 return None
-            for selector in reply_selectors:
-                try:
-                    buttons = page.locator(selector)
-                    for index in range(min(buttons.count(), 12)):
-                        button = buttons.nth(index)
-                        if not button.is_visible(timeout=500):
-                            continue
-                        if not self.is_comment_with_existing_replies(button):
-                            continue
-                        comment_text = self.extract_comment_text_near_reply_button(button)
-                        if comment_text:
-                            preview = comment_text[:140] + ("..." if len(comment_text) > 140 else "")
-                            self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] 💬 Đã quét comment có phản hồi sẵn để gửi vào ChatGPT: {text}"))
-                            return comment_text
-                except Exception:
-                    continue
+            try:
+                comment_text = page.evaluate(
+                    r"""
+                    () => {
+                        const norm = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+                        const isVisible = (el) => {
+                            if (!(el instanceof HTMLElement)) return false;
+                            const rect = el.getBoundingClientRect();
+                            const style = window.getComputedStyle(el);
+                            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+                        };
+                        const actionNoise = /^(?:thích|like|bình luận|comment|chia sẻ|share|gửi|send|phản hồi|reply|trả lời|xem thêm|see more|ẩn bớt|see less)$/i;
+                        const metaNoise = /^(?:\d+\s*(?:giây|phút|giờ|ngày|tuần|tháng|năm|s|m|h|d|w|mo|y)\s*(?:trước)?|vừa xong|just now|top fan|author)$/i;
+                        const threadedReplyNoise = /^(?:(?:xem|view|see|ẩn|hide)\s*(?:tất cả|all)?\s*)?(?:\d+[.,]?\d*\s*)?(?:phản hồi|repl(?:y|ies)|trả lời|câu trả lời)(?:\s*(?:trước|older|mới hơn|newer))?$/i;
+                        const hasReplies = (line) => /(?:\d+[.,]?\d*\s*)?(?:phản hồi|repl(?:y|ies)|trả lời|câu trả lời)/i.test(line);
+                        const cleanLines = (text) => String(text || '')
+                            .split(/\n+/)
+                            .map(norm)
+                            .filter((line) => line && line.length >= 2 && !actionNoise.test(line) && !metaNoise.test(line) && !threadedReplyNoise.test(line))
+                            .filter((line) => !/^\d+[.,]?\d*\s*(k|m|n|tr)?\s*(thích|likes?|phản hồi|repl(?:y|ies))$/i.test(line));
 
-            page.mouse.wheel(0, random.randint(500, 850))
-            if not self.interruptible_sleep(random.uniform(0.8, 1.4)):
+                        const buttons = Array.from(document.querySelectorAll('div[role="button"], span, a'))
+                            .filter((node) => isVisible(node) && /^(phản hồi|reply)$/i.test(norm(node.innerText || node.textContent)));
+                        for (const button of buttons.slice(0, 24)) {
+                            let node = button.parentElement;
+                            let best = '';
+                            let seenReplySignal = false;
+                            for (let depth = 0; node && depth < 8; depth += 1) {
+                                if (!isVisible(node)) {
+                                    node = node.parentElement;
+                                    continue;
+                                }
+                                const lines = cleanLines(node.innerText || node.textContent || '');
+                                if (!seenReplySignal && lines.some(hasReplies)) seenReplySignal = true;
+                                const candidate = lines
+                                    .filter((line) => !/^(phản hồi|reply|trả lời|thích|like)$/i.test(line))
+                                    .sort((a, b) => b.length - a.length)[0] || '';
+                                if (candidate.length > best.length) best = candidate;
+                                if (best.length >= 12 && best.length <= 500) break;
+                                node = node.parentElement;
+                            }
+                            if (seenReplySignal && best) return best.slice(0, 1200);
+                        }
+                        return '';
+                    }
+                    """
+                )
+                comment_text = re.sub(r"\s+", " ", (comment_text or "")).strip()[:1200]
+                if comment_text:
+                    preview = comment_text[:140] + ("..." if len(comment_text) > 140 else "")
+                    self.after(0, lambda n=acc_name, text=preview: self.append_live_log(f"[{n}] 💬 Đã quét comment có phản hồi sẵn để gửi vào ChatGPT: {text}"))
+                    return comment_text
+            except Exception:
+                pass
+
+            page.mouse.wheel(0, random.randint(420, 700))
+            if not self.interruptible_sleep(random.uniform(0.35, 0.8)):
                 return None
 
         first_comment_text = self.extract_first_visible_comment_text(page)
