@@ -24,7 +24,7 @@
         "value": "1280x800",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1779594290,
+        "expires": 1779760154,
         "httpOnly": false,
         "secure": true,
         "sameSite": "Lax"
@@ -34,7 +34,7 @@
         "value": "1",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1779330356,
+        "expires": 1779760232,
         "httpOnly": false,
         "secure": true,
         "sameSite": "None"
@@ -74,7 +74,7 @@
         "value": "61580957196279",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1810525294.926295,
+        "expires": 1810691301.718068,
         "httpOnly": false,
         "secure": true,
         "sameSite": "None"
@@ -101,27 +101,27 @@
     },
     {
         "name": "xs",
-        "value": "8%3AKrH0PY2a4Q649g%3A2%3A1778725542%3A-1%3A-1%3A%3AAczx5IqwVtapwWwcfPWSYXDsgSV3cwINJzBfsrVmCL0",
+        "value": "8%3AKrH0PY2a4Q649g%3A2%3A1778725542%3A-1%3A-1%3A%3AAcziL6f0x1vG8_NSEi04XZ6Ku8M3TZZnxbhm_VRejyY",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1810525294.926467,
+        "expires": 1810691301.718167,
         "httpOnly": true,
         "secure": true,
         "sameSite": "None"
     },
     {
         "name": "fr",
-        "value": "1lXeB8Qh9kHx32JP1.AWdQLVx4qoX1QmecbhS8wvPHFCYgh3ygNrT1NwNA7M84e4rsC3w.BqCTj1..AAA.0.0.BqCTk2.AWeGnuzt9dLwsZjflhE9aNEHQDQ",
+        "value": "1dAcncaRd9Uzbqy6n.AWcfdLyKIh3voWUdogKfQaWJHmuoX1ixBdPqMV2LiHZnDdjwKXk.BqC8Fw..AAA.0.0.BqC8Ge.AWcFmv11a3ii6ZN_CDZ_Dq5otY4",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1786765359.868717,
+        "expires": 1786931349.144737,
         "httpOnly": true,
         "secure": true,
         "sameSite": "None"
     },
     {
         "name": "presence",
-        "value": "C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1778989467056%2C%22v%22%3A1%7D",
+        "value": "C%7B%22t3%22%3A%5B%5D%2C%22utc3%22%3A1779155354827%2C%22v%22%3A1%7D",
         "domain": ".facebook.com",
         "path": "/",
         "expires": -1,

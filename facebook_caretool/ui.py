@@ -1539,6 +1539,44 @@ class FacebookCareTool(ctk.CTk):
 
     def generate_comment_with_manual_chatgpt(self, facebook_page, scanned_post_text, acc_name, target_comment_text=""):
         prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
+        chatgpt_cookie_path = "chatgpt_cookies.json"
+        if os.path.exists(chatgpt_cookie_path):
+            try:
+                with open(chatgpt_cookie_path, "r", encoding="utf-8") as f:
+                    raw_data = json.load(f)
+                    
+                    # 1. Bóc tách danh sách cookie tùy theo định dạng file JSON
+                    if isinstance(raw_data, dict) and "cookies" in raw_data:
+                        cookie_list = raw_data["cookies"] # Xử lý format {"url": "...", "cookies": [...]}
+                    elif isinstance(raw_data, list):
+                        cookie_list = raw_data          # Xử lý format [...]
+                    else:
+                        cookie_list = []
+
+                    # 2. Lọc và chuẩn hóa cookie để tránh lỗi Playwright
+                    valid_cookies = []
+                    for c in cookie_list:
+                        # Bỏ qua các trường như sameSite, hostOnly... vì Playwright rất dễ báo lỗi mismatch type
+                        valid_cookie = {
+                            "name": c.get("name"),
+                            "value": c.get("value"),
+                            "domain": c.get("domain", ".chatgpt.com"),
+                            "path": c.get("path", "/")
+                        }
+                        valid_cookies.append(valid_cookie)
+                        
+                    if valid_cookies:
+                        facebook_page.context.add_cookies(valid_cookies)
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🍪 Đã nạp thành công {len(valid_cookies)} cookie ChatGPT!"))
+                    else:
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ File cookie không có dữ liệu hợp lệ!"))
+            except Exception as e:
+                self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ⚠️ Lỗi nạp cookie ChatGPT: {err}"))
+        else:
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không tìm thấy file {chatgpt_cookie_path}, sẽ dùng phiên ẩn danh/hiện tại."))
+        # ------------------------------------------------
+
+        
         chat_page = facebook_page.context.new_page()
         try:
             chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)

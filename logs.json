@@ -2395,5 +2395,1120 @@
         "status": "error",
         "time": "17/05/2026 11:04",
         "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA)."
+    },
+    {
+        "account": "61580957196279",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 00:50",
+        "end_time": "18/05/2026 01:01",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 00:50",
+        "end_time": "18/05/2026 01:01",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580916015637",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 00:50",
+        "end_time": "18/05/2026 01:01",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580960439577",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 00:50",
+        "end_time": "18/05/2026 01:01",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61584945171629",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 00:50",
+        "end_time": "18/05/2026 01:01",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:01",
+        "end_time": "18/05/2026 01:12",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586353680289",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:01",
+        "end_time": "18/05/2026 01:12",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577828994776",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:01",
+        "end_time": "18/05/2026 01:12",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100070271312087",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:01",
+        "end_time": "18/05/2026 01:13",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069125455766",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:01",
+        "end_time": "18/05/2026 01:12",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069190223643",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:12",
+        "end_time": "18/05/2026 01:24",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069238250301",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:12",
+        "end_time": "18/05/2026 01:23",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586377591228",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:12",
+        "end_time": "18/05/2026 01:24",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586253330104",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:12",
+        "end_time": "18/05/2026 01:23",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100093094572099",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:13",
+        "end_time": "18/05/2026 01:19",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100092853170651",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:19",
+        "end_time": "18/05/2026 01:25",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581321107206",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:23",
+        "end_time": "18/05/2026 01:31",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585488147403",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:24",
+        "end_time": "18/05/2026 01:30",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61562983637062",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:24",
+        "end_time": "18/05/2026 01:30",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577833525595",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 01:24",
+        "end_time": "18/05/2026 01:31",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581235765384",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:49",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:49",
+        "end_time": "18/05/2026 08:50",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "time": "18/05/2026 08:49",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61581126811808",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:49",
+        "end_time": "18/05/2026 08:50",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581235765384",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "end_time": "18/05/2026 09:06",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "end_time": "18/05/2026 09:06",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61580916015637",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "end_time": "18/05/2026 09:06",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "time": "18/05/2026 08:55",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61580960439577",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "end_time": "18/05/2026 09:06",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61587726099517",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61587726099517",
+        "status": "error",
+        "time": "18/05/2026 08:55",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61584945171629",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 08:55",
+        "end_time": "18/05/2026 09:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:06",
+        "end_time": "18/05/2026 09:17",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61586353680289",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:06",
+        "end_time": "18/05/2026 09:17",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61577828994776",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:06",
+        "end_time": "18/05/2026 09:18",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100070271312087",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:06",
+        "end_time": "18/05/2026 09:17",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100069125455766",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:07",
+        "end_time": "18/05/2026 09:18",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100069190223643",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:17",
+        "end_time": "18/05/2026 09:28",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100069238250301",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:17",
+        "end_time": "18/05/2026 09:28",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61586377591228",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:17",
+        "end_time": "18/05/2026 09:28",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61586253330104",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:18",
+        "end_time": "18/05/2026 09:29",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100093094572099",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:18",
+        "end_time": "18/05/2026 09:30",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "100092853170651",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:28",
+        "end_time": "18/05/2026 09:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61581321107206",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:28",
+        "end_time": "18/05/2026 09:40",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, thi thoảng tham gia 1-2 group."
+    },
+    {
+        "account": "61585488147403",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:29",
+        "end_time": "18/05/2026 09:35",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61562983637062",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:29",
+        "end_time": "18/05/2026 09:35",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577833525595",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "18/05/2026 09:30",
+        "end_time": "18/05/2026 09:36",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:55",
+        "end_time": "19/05/2026 07:55",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:55",
+        "end_time": "19/05/2026 07:55",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:56",
+        "end_time": "19/05/2026 07:56",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:56",
+        "end_time": "19/05/2026 07:56",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:56",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:56",
+        "end_time": "19/05/2026 08:08",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:57",
+        "end_time": "19/05/2026 08:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580916015637",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:57",
+        "end_time": "19/05/2026 08:08",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580960439577",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 07:57",
+        "end_time": "19/05/2026 08:08",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "error",
+        "time": "19/05/2026 08:00",
+        "error": "Mouse.wheel: Target page, context or browser has been closed"
+    },
+    {
+        "account": "61584945171629",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 08:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 08:08",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "error",
+        "time": "19/05/2026 08:08",
+        "error": "Locator.fill: Target page, context or browser has been closed"
+    },
+    {
+        "account": "61584945171629",
+        "status": "error",
+        "time": "19/05/2026 08:08",
+        "error": "Locator.fill: Timeout 30000ms exceeded.\nCall log:\n  - waiting for locator(\"input[name=\\\"email\\\"], input[id=\\\"email\\\"]\").first\n"
+    },
+    {
+        "account": "61580957196279",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:35",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "stopped",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:35",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 5p, Reels 5p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580957196279",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:38",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580916015637",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:38",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580960439577",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577828994776",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:35",
+        "end_time": "19/05/2026 23:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100070271312087",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:38",
+        "end_time": "19/05/2026 23:41",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069125455766",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:38",
+        "end_time": "19/05/2026 23:41",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069190223643",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:39",
+        "end_time": "19/05/2026 23:42",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069238250301",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:39",
+        "end_time": "19/05/2026 23:42",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586377591228",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:39",
+        "end_time": "19/05/2026 23:42",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586253330104",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:41",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100093094572099",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:41",
+        "end_time": "19/05/2026 23:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586253330104",
+        "status": "error",
+        "time": "19/05/2026 23:41",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "100092853170651",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:41",
+        "end_time": "19/05/2026 23:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581321107206",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:42",
+        "end_time": "19/05/2026 23:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585488147403",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:42",
+        "end_time": "19/05/2026 23:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61562983637062",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:42",
+        "end_time": "19/05/2026 23:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577833525595",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "19/05/2026 23:44",
+        "end_time": "19/05/2026 23:48",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585327810877",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 00:48",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585327810877",
+        "status": "error",
+        "time": "20/05/2026 00:48",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA)."
+    },
+    {
+        "account": "61585327810877",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 00:49",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585327810877",
+        "status": "error",
+        "time": "20/05/2026 00:49",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA)."
+    },
+    {
+        "account": "61573679972373",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:03",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61573679972373",
+        "status": "error",
+        "time": "20/05/2026 01:04",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA)."
+    },
+    {
+        "account": "61584878810853",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:08",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61584878810853",
+        "status": "error",
+        "time": "20/05/2026 01:09",
+        "error": "Đăng nhập thất bại (Sai pass hoặc dính Checkpoint/2FA)."
+    },
+    {
+        "account": "61585047805099",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:22",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 1p, Reels 1p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585047805099",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:22",
+        "profile": "Cân bằng",
+        "plan": "Cân bằng: Newsfeed 1p, Reels 1p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585047805099",
+        "status": "error",
+        "time": "20/05/2026 01:22",
+        "error": "Locator.is_hidden: Target page, context or browser has been closed"
+    },
+    {
+        "account": "61585047805099",
+        "status": "error",
+        "time": "20/05/2026 01:23",
+        "error": "Không mở được Facebook (Page.goto: Target page, context or browser has been closed). Nếu đang dùng proxy [không dùng proxy], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "61580957196279",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:23",
+        "end_time": "20/05/2026 01:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581126811808",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:23",
+        "end_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580916015637",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:23",
+        "end_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61580960439577",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:23",
+        "end_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577828994776",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:23",
+        "end_time": "20/05/2026 01:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100070271312087",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069125455766",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069190223643",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:44",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069238250301",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586377591228",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:45",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100070271312087",
+        "status": "error",
+        "time": "20/05/2026 01:46",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.163.27:45373:muaproxy6a047dd2c4b95:HhyQloEymxiGOyP3], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "61586253330104",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:46",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069125455766",
+        "status": "error",
+        "time": "20/05/2026 01:46",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.163.27:45373:muaproxy6a047dd2c4b95:HhyQloEymxiGOyP3], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "100093094572099",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:46",
+        "end_time": "20/05/2026 02:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069190223643",
+        "status": "error",
+        "time": "20/05/2026 01:46",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.163.27:45373:muaproxy6a047dd2c4b95:HhyQloEymxiGOyP3], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "100092853170651",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:46",
+        "end_time": "20/05/2026 02:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "100069238250301",
+        "status": "error",
+        "time": "20/05/2026 01:46",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.170.107:47863:muaproxy6a04b240f098f:Ly51F0FwB59OY4kB], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "61581321107206",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:46",
+        "end_time": "20/05/2026 02:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586377591228",
+        "status": "error",
+        "time": "20/05/2026 01:46",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.163.27:45373:muaproxy6a047dd2c4b95:HhyQloEymxiGOyP3], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "61585488147403",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:46",
+        "end_time": "20/05/2026 02:07",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586253330104",
+        "status": "error",
+        "time": "20/05/2026 01:48",
+        "error": "Không mở được Facebook (Page.goto: net::ERR_TIMED_OUT at https://facebook.com/\nCall log:\n  - navigating to \"https://facebook.com/\", waiting until \"domcontentloaded\"\n). Nếu đang dùng proxy [171.236.163.27:45373:muaproxy6a047dd2c4b95:HhyQloEymxiGOyP3], hãy đổi/tắt proxy hoặc kiểm tra mạng vì trình duyệt nhận phản hồi rỗng."
+    },
+    {
+        "account": "61562983637062",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 01:48",
+        "end_time": "20/05/2026 02:09",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61577833525595",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:07",
+        "end_time": "20/05/2026 02:28",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585327810877",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:07",
+        "end_time": "20/05/2026 02:14",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61573679972373",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:07",
+        "end_time": "20/05/2026 02:14",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61584878810853",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:07",
+        "end_time": "20/05/2026 02:14",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586422922606",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:09",
+        "end_time": "20/05/2026 02:16",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61584993443711",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:14",
+        "end_time": "20/05/2026 02:20",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61585047805099",
+        "status": "done",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 02:14",
+        "end_time": "20/05/2026 02:20",
+        "profile": "Khởi động nhẹ",
+        "plan": "Khởi động nhẹ: Newsfeed 3p, Reels 2p, nghỉ 10-20s, không like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "error",
+        "time": "20/05/2026 08:39",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61586353680289",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:39",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586353680289",
+        "status": "error",
+        "time": "20/05/2026 08:39",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61581235765384",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:51",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61581235765384",
+        "status": "error",
+        "time": "20/05/2026 08:51",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61587726099517",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:51",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587726099517",
+        "status": "error",
+        "time": "20/05/2026 08:51",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61587616415843",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:51",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61587616415843",
+        "status": "error",
+        "time": "20/05/2026 08:51",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
+    },
+    {
+        "account": "61586353680289",
+        "status": "running",
+        "action": "care_smart_profile",
+        "start_time": "20/05/2026 08:51",
+        "profile": "Theo cấu hình chung",
+        "plan": "Theo cấu hình chung: Newsfeed 10p, Reels 10p, nghỉ 4-9s, bật like, đọc thông báo, không tham gia group."
+    },
+    {
+        "account": "61586353680289",
+        "status": "error",
+        "time": "20/05/2026 08:51",
+        "error": "Không có Cookie và không có UID/Pass để tự động đăng nhập!"
     }
 ]
