@@ -792,17 +792,35 @@ async function attachImagesToChatGPT(chatPage, imagePaths) {
     'input[type="file"]',
     'input[type="file"][accept*="image" i]',
   ].join(', ');
+  const attachmentPreviewSelector = [
+    '[data-testid*="composer" i][data-testid*="attachment" i]',
+    '[data-testid*="attachment" i]',
+    '[aria-label*="Attached" i]',
+    '[aria-label*="Đính kèm" i]',
+    'button[aria-label*="Remove" i]',
+  ].join(', ');
 
-  const setFilesViaInput = async () => {
-    const input = chatPage.locator(fileInputSelector).last();
-    if (await input.count().catch(() => 0)) {
-      await input.setInputFiles(imagePaths, { timeout: 20000 });
-      return true;
+  const waitForAttachmentPreview = async () => {
+    await chatPage.waitForFunction((selector) => document.querySelectorAll(selector).length > 0, attachmentPreviewSelector, { timeout: 12000 }).catch(() => null);
+  };
+
+  const setFilesViaAnyInput = async () => {
+    const inputCount = await chatPage.locator(fileInputSelector).count().catch(() => 0);
+    if (!inputCount) return false;
+    for (let i = inputCount - 1; i >= 0; i -= 1) {
+      const input = chatPage.locator(fileInputSelector).nth(i);
+      try {
+        await input.setInputFiles(imagePaths, { timeout: 10000 });
+        await waitForAttachmentPreview();
+        return true;
+      } catch {
+        // thử input khác vì ChatGPT có thể render nhiều input ẩn/khóa
+      }
     }
     return false;
   };
 
-  if (await setFilesViaInput()) {
+  if (await setFilesViaAnyInput()) {
     log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
     await chatPage.waitForTimeout(2500);
     return;
@@ -830,7 +848,7 @@ async function attachImagesToChatGPT(chatPage, imagePaths) {
     }
   }
 
-  if (await setFilesViaInput()) {
+  if (await setFilesViaAnyInput()) {
     log(`📎 Đã đính kèm ${imagePaths.length} ảnh/thumbnail vào ChatGPT.`);
     await chatPage.waitForTimeout(2500);
     return;
