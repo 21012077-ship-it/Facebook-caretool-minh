@@ -1750,17 +1750,25 @@ class FacebookCareTool(ctk.CTk):
         )
 
         acc_tasks: dict[int, list[str]] = {acc_idx: [] for acc_idx in account_indexes}
-        skipped_urls = 0
+        skipped_assignments = 0
         for url in urls:
-            available_accounts = [idx for idx in account_indexes if len(acc_tasks[idx]) < comment_limit]
-            if not available_accounts:
-                skipped_urls += 1
-                continue
-            acc_idx = min(available_accounts, key=lambda idx: len(acc_tasks[idx]))
-            acc_tasks[acc_idx].append(url)
+            assigned_any = False
+            for acc_idx in account_indexes:
+                if len(acc_tasks[acc_idx]) >= comment_limit:
+                    skipped_assignments += 1
+                    continue
+                acc_tasks[acc_idx].append(url)
+                assigned_any = True
+            if not assigned_any:
+                self.after(0, lambda u=url: self.append_live_log(f"⚠️ Tất cả tài khoản đã đạt giới hạn, bỏ qua link: {u[:60]}..."))
 
-        if skipped_urls:
-            self.after(0, lambda count=skipped_urls, limit=comment_limit: self.append_live_log(f"⚠️ Bỏ qua {count} link vì đã đạt giới hạn {limit} comment/tài khoản."))
+        if skipped_assignments:
+            self.after(
+                0,
+                lambda count=skipped_assignments, limit=comment_limit: self.append_live_log(
+                    f"⚠️ Đã bỏ qua {count} lượt gán vì tài khoản đạt giới hạn {limit} comment/tài khoản."
+                ),
+            )
 
         runnable_tasks = [
             (acc_idx, acc_urls)
@@ -1769,6 +1777,7 @@ class FacebookCareTool(ctk.CTk):
         ]
 
         def run_account_comment_task(acc_idx, acc_urls):
+            nonlocal success_count, failed_count
             if self.is_task_stopped():
                 return
 
