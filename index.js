@@ -25,29 +25,43 @@ function normalizeSameSite(value) {
   return undefined;
 }
 
+function normalizeDomain(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      return new URL(raw).hostname;
+    } catch {
+      return '';
+    }
+  }
+  return raw.replace(/^\./, '');
+}
+
 function convertBrowserCookie(rawCookie) {
   if (!rawCookie || typeof rawCookie !== 'object') return null;
   const name = String(rawCookie.name || '').trim();
   const value = String(rawCookie.value || '');
-  const domain = String(rawCookie.domain || '').trim();
+  const domain = normalizeDomain(rawCookie.domain || rawCookie.host || rawCookie.hostOnly);
   if (!name || !value || !domain) return null;
 
+  const secure = Boolean(rawCookie.secure);
   const normalized = {
     name,
     value,
     domain,
-    path: rawCookie.path || '/',
+    path: String(rawCookie.path || '/').trim() || '/',
     httpOnly: Boolean(rawCookie.httpOnly),
-    secure: Boolean(rawCookie.secure),
+    secure,
   };
 
   const expiresRaw = rawCookie.expires ?? rawCookie.expirationDate;
-  if (typeof expiresRaw === 'number' && Number.isFinite(expiresRaw)) {
+  if (typeof expiresRaw === 'number' && Number.isFinite(expiresRaw) && expiresRaw > 0) {
     normalized.expires = Math.floor(expiresRaw);
   }
 
   const sameSite = normalizeSameSite(rawCookie.sameSite);
-  if (sameSite) {
+  if (sameSite && !(sameSite === 'None' && !secure)) {
     normalized.sameSite = sameSite;
   }
 
@@ -72,8 +86,22 @@ async function applyChatGPTCookies(context) {
       return;
     }
 
-    await context.addCookies(converted);
-    log(`🍪 Đã nạp ${converted.length}/${parsed.length} cookie ChatGPT (auto-convert sang chuẩn Playwright).`);
+    const accepted = [];
+    for (const cookie of converted) {
+      try {
+        await context.addCookies([cookie]);
+        accepted.push(cookie);
+      } catch {
+        // bỏ qua cookie không hợp lệ để tránh fail toàn bộ lô
+      }
+    }
+
+    if (!accepted.length) {
+      log(`⚠️ Không có cookie ChatGPT hợp lệ sau khi lọc: ${CHATGPT_COOKIES_FILE}`);
+      return;
+    }
+
+    log(`🍪 Đã nạp ${accepted.length}/${parsed.length} cookie ChatGPT (lọc lỗi theo từng cookie).`);
   } catch (error) {
     if (error && error.code === 'ENOENT') {
       log(`ℹ️ Không tìm thấy file cookie ChatGPT (${CHATGPT_COOKIES_FILE}), tiếp tục dùng cookie trong Chromium profile.`);
