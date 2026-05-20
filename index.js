@@ -7,13 +7,80 @@ const { buildCommentPrompt, buildReplyPrompt, validateGeneratedComment } = requi
 const POST_FLAG = '--post';
 const DEFAULT_PROFILE_DIR = path.resolve(process.env.FB_PROFILE_DIR || 'fb_comment_profile');
 const ENABLE_VISION = process.env.FB_COMMENT_ENABLE_VISION !== '0';
+const CHATGPT_COOKIES_FILE = path.resolve(process.env.CHATGPT_COOKIES_FILE || 'chatgpt_cookies.json');
 
 function log(message) {
   console.log(`[facebook-commenter] ${message}`);
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT`);
+  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT\n  CHATGPT_COOKIES_FILE=./chatgpt_cookies.json # file cookie export để auto-convert rồi nạp vào Playwright`);
+}
+
+function normalizeSameSite(value) {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw === 'lax') return 'Lax';
+  if (raw === 'strict') return 'Strict';
+  if (raw === 'none' || raw === 'no_restriction' || raw === 'unspecified') return 'None';
+  return undefined;
+}
+
+function convertBrowserCookie(rawCookie) {
+  if (!rawCookie || typeof rawCookie !== 'object') return null;
+  const name = String(rawCookie.name || '').trim();
+  const value = String(rawCookie.value || '');
+  const domain = String(rawCookie.domain || '').trim();
+  if (!name || !value || !domain) return null;
+
+  const normalized = {
+    name,
+    value,
+    domain,
+    path: rawCookie.path || '/',
+    httpOnly: Boolean(rawCookie.httpOnly),
+    secure: Boolean(rawCookie.secure),
+  };
+
+  const expiresRaw = rawCookie.expires ?? rawCookie.expirationDate;
+  if (typeof expiresRaw === 'number' && Number.isFinite(expiresRaw)) {
+    normalized.expires = Math.floor(expiresRaw);
+  }
+
+  const sameSite = normalizeSameSite(rawCookie.sameSite);
+  if (sameSite) {
+    normalized.sameSite = sameSite;
+  }
+
+  return normalized;
+}
+
+async function applyChatGPTCookies(context) {
+  try {
+    const rawText = await fs.readFile(CHATGPT_COOKIES_FILE, 'utf8');
+    const parsed = JSON.parse(rawText);
+    if (!Array.isArray(parsed) || !parsed.length) {
+      log(`⚠️ File cookie ChatGPT rỗng/không hợp lệ: ${CHATGPT_COOKIES_FILE}`);
+      return;
+    }
+
+    const converted = parsed
+      .map(convertBrowserCookie)
+      .filter(Boolean);
+
+    if (!converted.length) {
+      log(`⚠️ Không convert được cookie nào từ ${CHATGPT_COOKIES_FILE}`);
+      return;
+    }
+
+    await context.addCookies(converted);
+    log(`🍪 Đã nạp ${converted.length}/${parsed.length} cookie ChatGPT (auto-convert sang chuẩn Playwright).`);
+  } catch (error) {
+    if (error && error.code === 'ENOENT') {
+      log(`ℹ️ Không tìm thấy file cookie ChatGPT (${CHATGPT_COOKIES_FILE}), tiếp tục dùng cookie trong Chromium profile.`);
+      return;
+    }
+    log(`⚠️ Lỗi nạp cookie ChatGPT: ${error.message}`);
+  }
 }
 
 function parseArgs(argv) {
@@ -786,6 +853,7 @@ async function generateCommentWithChatGPT(context, postData, targetComment = '')
 
   try {
     log('🧠 Mở ChatGPT thủ công trên máy bằng cookie/profile Chromium...');
+    await applyChatGPTCookies(context);
     await ensureChatGPTLoggedIn(chatPage);
 
     const assistantSelector = '[data-message-author-role="assistant"], div.markdown.prose, .markdown';
