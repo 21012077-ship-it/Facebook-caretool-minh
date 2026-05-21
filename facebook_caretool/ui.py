@@ -1844,23 +1844,31 @@ class FacebookCareTool(ctk.CTk):
         )
 
         acc_tasks: dict[int, list[str]] = {acc_idx: [] for acc_idx in account_indexes}
-        skipped_assignments = 0
-        for url in urls:
-            assigned_any = False
-            for acc_idx in account_indexes:
-                if len(acc_tasks[acc_idx]) >= comment_limit:
-                    skipped_assignments += 1
-                    continue
-                acc_tasks[acc_idx].append(url)
-                assigned_any = True
-            if not assigned_any:
-                self.after(0, lambda u=url: self.append_live_log(f"⚠️ Tất cả tài khoản đã đạt giới hạn, bỏ qua link: {u[:60]}..."))
+        skipped_urls = 0
+        if account_indexes:
+            account_cursor = 0
+            total_accounts = len(account_indexes)
+            for url in urls:
+                assigned_any = False
+                checked_accounts = 0
+                while checked_accounts < total_accounts:
+                    acc_idx = account_indexes[account_cursor]
+                    account_cursor = (account_cursor + 1) % total_accounts
+                    checked_accounts += 1
+                    if len(acc_tasks[acc_idx]) >= comment_limit:
+                        continue
+                    acc_tasks[acc_idx].append(url)
+                    assigned_any = True
+                    break
+                if not assigned_any:
+                    skipped_urls += 1
+                    self.after(0, lambda u=url: self.append_live_log(f"⚠️ Tất cả tài khoản đã đạt giới hạn, bỏ qua link: {u[:60]}..."))
 
-        if skipped_assignments:
+        if skipped_urls:
             self.after(
                 0,
-                lambda count=skipped_assignments, limit=comment_limit: self.append_live_log(
-                    f"⚠️ Đã bỏ qua {count} lượt gán vì tài khoản đạt giới hạn {limit} comment/tài khoản."
+                lambda count=skipped_urls, limit=comment_limit: self.append_live_log(
+                    f"⚠️ Đã bỏ qua {count} link vì toàn bộ tài khoản đã đạt giới hạn {limit} link/tài khoản."
                 ),
             )
 
