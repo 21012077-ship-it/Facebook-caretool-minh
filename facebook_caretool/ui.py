@@ -723,9 +723,13 @@ class FacebookCareTool(ctk.CTk):
             row = ctk.CTkFrame(self.cmt_acc_scroll, fg_color="transparent")
             row.pack(fill="x", pady=2)
 
+            account_label = acc.get("name", "Không tên")
+            if (acc.get("care_profile") or "auto") == "manual":
+                account_label = f"{account_label} • {profile_label('manual')}"
+
             is_checked = ctk.BooleanVar(value=index in self.comment_selected_accounts)
             chk = ctk.CTkCheckBox(
-                row, text=acc.get("name", "Không tên"),
+                row, text=account_label,
                 variable=is_checked,
                 command=lambda idx=index, var=is_checked: self.toggle_cmt_acc(idx, var.get())
             )
