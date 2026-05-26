@@ -8,13 +8,26 @@ const POST_FLAG = '--post';
 const DEFAULT_PROFILE_DIR = path.resolve(process.env.FB_PROFILE_DIR || 'fb_comment_profile');
 const ENABLE_VISION = process.env.FB_COMMENT_ENABLE_VISION !== '0';
 const CHATGPT_COOKIES_FILE = path.resolve(process.env.CHATGPT_COOKIES_FILE || 'chatgpt_cookies.json');
+const PLAYWRIGHT_SLOW_MO = Number.isFinite(Number(process.env.FB_COMMENT_SLOW_MO))
+  ? Math.max(0, Number(process.env.FB_COMMENT_SLOW_MO))
+  : 0;
 
 function log(message) {
   console.log(`[facebook-commenter] ${message}`);
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0  # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT\n  CHATGPT_COOKIES_FILE=./chatgpt_cookies.json # file cookie export để auto-convert rồi nạp vào Playwright`);
+  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng cùng Chromium profile để dùng cookie đăng nhập sẵn.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile\n  FB_COMMENT_ENABLE_VISION=0   # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT\n  FB_COMMENT_SLOW_MO=0         # tốc độ Playwright (ms), mặc định 0 để chạy mượt\n  CHATGPT_COOKIES_FILE=./chatgpt_cookies.json # file cookie export để auto-convert rồi nạp vào Playwright`);
+}
+
+async function optimizePagePerformance(page, { keepImages }) {
+  await page.route('**/*', (route) => {
+    const request = route.request();
+    const type = request.resourceType();
+    if (type === 'font') return route.abort();
+    if (!keepImages && (type === 'image' || type === 'media')) return route.abort();
+    return route.continue();
+  });
 }
 
 function normalizeSameSite(value) {
@@ -939,7 +952,7 @@ async function main() {
     viewport: { width: 1280, height: 900 },
     locale: 'vi-VN',
     timezoneId: 'Asia/Ho_Chi_Minh',
-    slowMo: 80,
+    slowMo: PLAYWRIGHT_SLOW_MO,
     args: [
       '--disable-blink-features=AutomationControlled',
       '--disable-features=Translate',
@@ -950,6 +963,7 @@ async function main() {
   try {
     const page = context.pages()[0] || await context.newPage();
     page.setDefaultTimeout(20000);
+    await optimizePagePerformance(page, { keepImages: ENABLE_VISION });
 
     log('Kiểm tra trạng thái đăng nhập Facebook...');
     await ensureLoggedIn(context, page);
