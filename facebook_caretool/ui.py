@@ -3107,6 +3107,94 @@ class FacebookCareTool(ctk.CTk):
         return None
 
     # --- HÀM MỚI: KIỂM TRA VÀ TỰ ĐỘNG ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE ---
+
+    def click_post_2fa_white_choice(self, page, uid, timeout_seconds=15):
+        """Click the white/secondary choice on Facebook's post-2FA trust-device prompt.
+
+        Facebook may show a screen like "Trust this device?" after a valid 2FA
+        code.  The requested action is to choose the white/secondary option
+        (keep confirming this login instead of trusting/saving the device).
+        """
+        secondary_choice_selectors = (
+            'div[role="button"]:has-text("Toujours confirmer")',
+            'span:has-text("Toujours confirmer")',
+            'button:has-text("Toujours confirmer")',
+            'div[role="button"]:has-text("Always confirm")',
+            'span:has-text("Always confirm")',
+            'button:has-text("Always confirm")',
+            'div[role="button"]:has-text("Luôn xác nhận")',
+            'span:has-text("Luôn xác nhận")',
+            'button:has-text("Luôn xác nhận")',
+            'div[role="button"]:has-text("Tiếp tục xác nhận")',
+            'span:has-text("Tiếp tục xác nhận")',
+            'button:has-text("Tiếp tục xác nhận")',
+        )
+        checkbox_selectors = (
+            'input[type="checkbox"]:visible',
+            'div[role="checkbox"]:visible',
+            '[aria-checked]:visible',
+        )
+        continue_selectors = (
+            'div[role="button"]:has-text("Tiếp tục")',
+            'button:has-text("Tiếp tục")',
+            'div[aria-label="Tiếp tục"]',
+            'div[role="button"]:has-text("Continue")',
+            'button:has-text("Continue")',
+            'div[aria-label="Continue"]',
+            'div[role="button"]:has-text("Continuer")',
+            'button:has-text("Continuer")',
+            'div[aria-label="Continuer"]',
+        )
+
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if self.is_task_stopped():
+                return False
+
+            for selector in secondary_choice_selectors:
+                try:
+                    choice = page.locator(selector).locator("visible=true").first
+                    if choice.is_visible(timeout=700):
+                        self.after(0, lambda: self.append_live_log(
+                            f"[{uid}] Đã thấy màn hình tin cậy thiết bị, đang tick ô trắng/luôn xác nhận..."
+                        ))
+                        choice.click(no_wait_after=True)
+                        time.sleep(3)
+                        return True
+                except Exception:
+                    continue
+
+            for selector in checkbox_selectors:
+                try:
+                    checkbox = page.locator(selector).first
+                    if checkbox.is_visible(timeout=500):
+                        self.after(0, lambda: self.append_live_log(
+                            f"[{uid}] Đã thấy ô chọn sau 2FA, đang tick ô màu trắng..."
+                        ))
+                        checkbox.click(no_wait_after=True)
+                        time.sleep(1)
+                        for continue_selector in continue_selectors:
+                            try:
+                                continue_button = page.locator(continue_selector).locator("visible=true").first
+                                if continue_button.is_visible(timeout=500):
+                                    continue_button.click(no_wait_after=True)
+                                    time.sleep(3)
+                                    break
+                            except Exception:
+                                continue
+                        return True
+                except Exception:
+                    continue
+
+            try:
+                if self.is_facebook_success_url(page.url) and self.has_facebook_login_cookie(page.context.cookies()):
+                    return False
+            except Exception:
+                pass
+            time.sleep(1)
+
+        return False
+
     def ensure_login(self, context, page, account):
         uid = account.get("uid", "")
         password = account.get("password", "")
@@ -3198,21 +3286,9 @@ class FacebookCareTool(ctk.CTk):
                 two_fa_box.press("Enter")
                 time.sleep(8) # Tăng chờ lên 8s để FB load xong trang sau khi nhập 2FA
 
-                # Xử lý nút "Lưu trình duyệt" (Save browser) nếu FB hỏi
-                for _ in range(3):
-                    btn_continue = page.locator(
-                        'div[role="button"]:has-text("Lưu"), '
-                        'div[role="button"]:has-text("Tiếp tục"), '
-                        'div[role="button"]:has-text("Xác nhận"), '
-                        'div[aria-label="Tiếp tục"], '
-                        'div[aria-label="Lưu trình duyệt"]'
-                    ).first
-
-                    if btn_continue.is_visible():
-                        btn_continue.click(no_wait_after=True)
-                        time.sleep(3)
-                    else:
-                        break
+                # Nếu Facebook hỏi "Tin cậy thiết bị này?", chọn ô/nút trắng
+                # (luôn xác nhận đây là tôi) thay vì nút xanh lưu/tin cậy thiết bị.
+                self.click_post_2fa_white_choice(page, uid, timeout_seconds=15)
             else:
                 self.after(0, lambda: self.append_live_log(f"[{uid}] ❌ Lỗi: Mã Secret 2FA không tạo được 6 số. Kiểm tra lại chuỗi 2FA!"))
 
