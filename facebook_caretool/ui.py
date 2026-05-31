@@ -5,7 +5,15 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from playwright.sync_api import sync_playwright
 
-from .account_io import backup_accounts_file, load_import_accounts, merge_accounts, save_export_file
+from .account_io import (
+    backup_accounts_file,
+    load_full_backup_file,
+    load_import_accounts,
+    merge_accounts,
+    restore_full_backup,
+    save_export_file,
+    save_full_backup_file,
+)
 from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
@@ -692,14 +700,23 @@ class FacebookCareTool(ctk.CTk):
 
         io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
         io_frame.grid(row=2, column=0, sticky="ew", pady=12)
-        ctk.CTkLabel(io_frame, text="Import / Export account an toàn", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
-        ctk.CTkLabel(io_frame, text="Export mặc định sẽ bỏ password và mã 2FA. Chỉ bật tùy chọn bên dưới khi bạn thật sự cần sao lưu đầy đủ vào nơi an toàn.", text_color="#fbbf24", wraplength=850, justify="left").pack(fill="x", padx=18, pady=(0, 10))
+        ctk.CTkLabel(io_frame, text="Backup / Import dữ liệu", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
+        ctk.CTkLabel(
+            io_frame,
+            text="Backup đầy đủ sẽ gom account, password/2FA, lịch sử, cài đặt và file cookie vào 1 file JSON để đổi máy chỉ cần import lại. Hãy lưu file ở nơi an toàn.",
+            text_color="#a7f3d0",
+            wraplength=850,
+            justify="left",
+        ).pack(fill="x", padx=18, pady=(0, 8))
+        ctk.CTkLabel(io_frame, text="Export account riêng lẻ mặc định sẽ bỏ password và mã 2FA. Chỉ bật tùy chọn bên dưới khi bạn thật sự cần export đầy đủ account.", text_color="#fbbf24", wraplength=850, justify="left").pack(fill="x", padx=18, pady=(0, 10))
         self.export_sensitive_var = ctk.BooleanVar(value=bool(self.app_settings.get("export_sensitive_default", False)))
         ctk.CTkCheckBox(io_frame, text="Bao gồm password và 2FA trong file export", variable=self.export_sensitive_var).pack(anchor="w", padx=18, pady=4)
         self.import_overwrite_var = ctk.BooleanVar(value=bool(self.app_settings.get("import_overwrite_default", False)))
         ctk.CTkCheckBox(io_frame, text="Khi import, ghi đè account trùng UID/tên", variable=self.import_overwrite_var).pack(anchor="w", padx=18, pady=4)
         action_row = ctk.CTkFrame(io_frame, fg_color="transparent")
         action_row.pack(fill="x", padx=18, pady=(12, 18))
+        ctk.CTkButton(action_row, text="💾 Backup đầy đủ", width=170, fg_color="#16a34a", command=self.backup_all_data).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(action_row, text="📥 Import backup", width=170, fg_color="#7c3aed", command=self.import_full_backup_file).pack(side="left", padx=(0, 10))
         ctk.CTkButton(action_row, text="⬇ Export accounts", width=170, fg_color="#0d9488", command=self.export_accounts_safe).pack(side="left", padx=(0, 10))
         ctk.CTkButton(action_row, text="⬆ Import accounts", width=170, fg_color="#2563eb", command=self.import_accounts_safe).pack(side="left")
 
@@ -2225,16 +2242,96 @@ class FacebookCareTool(ctk.CTk):
         self.app_settings.pop("ai_comment_base_url", None)
 
     def save_app_settings(self):
+        self.save_app_settings_without_popup()
+        self.refresh_settings_widgets()
+        messagebox.showinfo("Đã lưu", "Đã lưu cài đặt.")
+
+    def backup_all_data(self):
+        if not messagebox.askyesno(
+            "Xác nhận backup",
+            "File backup đầy đủ sẽ chứa account, password, 2FA, cookie, lịch sử và cài đặt. Chỉ lưu ở nơi an toàn. Tiếp tục?",
+        ):
+            return
+        default_name = f"facebook-caretool-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        path = filedialog.asksaveasfilename(
+            title="Backup đầy đủ dữ liệu",
+            initialfile=default_name,
+            defaultextension=".json",
+            filetypes=[("JSON Files", "*.json")],
+        )
+        if not path:
+            return
+        try:
+            self.save_app_settings_without_popup()
+            save_full_backup_file(path, self.accounts, self.logs, self.app_settings, include_cookie_files=True)
+            messagebox.showinfo("Backup hoàn tất", f"Đã lưu toàn bộ dữ liệu vào file:\n{path}")
+        except Exception as exc:
+            messagebox.showerror("Backup lỗi", str(exc))
+
+    def import_full_backup_file(self):
+        path = filedialog.askopenfilename(title="Import backup đầy đủ", filetypes=[("JSON Files", "*.json")])
+        if not path:
+            return
+        if not messagebox.askyesno(
+            "Xác nhận import",
+            "Import backup sẽ tự động thêm lại tài khoản, khôi phục cookie/lịch sử/cài đặt và có thể ghi đè account trùng nếu bạn bật tùy chọn ghi đè. Tiếp tục?",
+        ):
+            return
+        try:
+            backup_payload = load_full_backup_file(path)
+            backup_path = backup_accounts_file(ACCOUNTS_FILE)
+            self.accounts, self.logs, self.app_settings, stats = restore_full_backup(
+                backup_payload,
+                self.accounts,
+                self.logs,
+                self.app_settings,
+                overwrite_accounts=self.import_overwrite_var.get(),
+            )
+            self.save_accounts()
+            self.save_logs()
+            self.save_json("settings.json", self.app_settings)
+            self.refresh_accounts()
+            self.refresh_comment_accounts()
+            self.refresh_browser_accounts()
+            self.refresh_history_view()
+            self.refresh_settings_widgets()
+            self.refresh_settings_info()
+            backup_note = f"\nBackup accounts cũ: {backup_path}" if backup_path else ""
+            messagebox.showinfo(
+                "Import backup hoàn tất",
+                (
+                    f"Account thêm: {stats['added']} | Cập nhật: {stats['updated']} | Bỏ qua trùng: {stats['skipped']}\n"
+                    f"Log khôi phục: {stats['logs_added']} | File cookie khôi phục: {stats['files_restored']}"
+                    f" | File bỏ qua: {stats['files_skipped']}{backup_note}"
+                ),
+            )
+        except Exception as exc:
+            messagebox.showerror("Import backup lỗi", str(exc))
+
+    def save_app_settings_without_popup(self):
         self.save_comment_content(show_message=False)
-        self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
-        self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
-        self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
+        if hasattr(self, "default_url_entry"):
+            self.app_settings["default_home_url"] = self.default_url_entry.get().strip() or "https://www.facebook.com/"
+        if hasattr(self, "export_sensitive_var"):
+            self.app_settings["export_sensitive_default"] = self.export_sensitive_var.get()
+        if hasattr(self, "import_overwrite_var"):
+            self.app_settings["import_overwrite_default"] = self.import_overwrite_var.get()
         self.sync_ai_comment_settings_from_widgets()
         self.save_json("settings.json", self.app_settings)
+
+    def refresh_settings_widgets(self):
+        if hasattr(self, "default_url_entry"):
+            self.default_url_entry.delete(0, "end")
+            self.default_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
+        if hasattr(self, "export_sensitive_var"):
+            self.export_sensitive_var.set(bool(self.app_settings.get("export_sensitive_default", False)))
+        if hasattr(self, "import_overwrite_var"):
+            self.import_overwrite_var.set(bool(self.app_settings.get("import_overwrite_default", False)))
+        if hasattr(self, "ai_comment_enabled_var"):
+            self.ai_comment_enabled_var.set(bool(self.app_settings.get("ai_comment_enabled", True)))
         if hasattr(self, "browser_url_entry"):
             self.browser_url_entry.delete(0, "end")
-            self.browser_url_entry.insert(0, self.app_settings["default_home_url"])
-        messagebox.showinfo("Đã lưu", "Đã lưu cài đặt.")
+            self.browser_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
 
     def export_accounts_safe(self):
         include_sensitive = self.export_sensitive_var.get()

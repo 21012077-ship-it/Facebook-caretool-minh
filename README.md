@@ -13,7 +13,7 @@ Desktop tool Python/CustomTkinter để quản lý tài khoản Facebook, mở b
 
 - Mở browser thủ công cho từng account.
 - Lịch sử thao tác và thống kê theo ngày/account/trạng thái.
-- Import/export account an toàn, mặc định ẩn password và 2FA.
+- Backup đầy đủ vào 1 file JSON gồm account, password/2FA, lịch sử, cài đặt và cookie để đổi máy chỉ cần import lại; vẫn hỗ trợ import/export account an toàn, mặc định ẩn password và 2FA.
 - Hỗ trợ lưu dữ liệu bằng JSON và SQLite.
 
 ## Cấu trúc chính
@@ -101,6 +101,17 @@ Ghi chú vận hành:
 - Tool chụp ảnh/thumbnail có kích thước phù hợp để đính kèm vào ChatGPT; nếu không lấy được chữ trong ảnh thì prompt/log ghi rõ chưa OCR. Có thể tắt bước chụp/gửi ảnh bằng `FB_COMMENT_ENABLE_VISION=0`.
 - Không có flag `--post` thì tool chỉ in reply ở chế độ preview, không dán và không tự bấm đăng.
 - Luồng tự tạo hiện chạy theo thứ tự: quét nội dung/ảnh bài viết → quét comment cần trả lời → nhờ ChatGPT tạo reply liên quan cả bài viết và comment → đăng vào ô phản hồi của comment.
+
+
+## Backup / đổi máy
+
+Trong tab **Cài đặt → Backup / Import dữ liệu**:
+
+1. Bấm **Backup đầy đủ** để tạo một file `facebook-caretool-backup-YYYYMMDD-HHMMSS.json`. File này gom account, password/2FA, lịch sử, cài đặt và các file cookie đang được account tham chiếu.
+2. Trên máy mới, cài/chạy tool rồi bấm **Import backup** và chọn file backup. Tool sẽ tự động thêm lại account, khôi phục cookie, lịch sử và cài đặt.
+3. Nếu muốn cập nhật account trùng UID/tên bằng dữ liệu trong backup, bật tùy chọn **Khi import, ghi đè account trùng UID/tên** trước khi import.
+
+> File backup đầy đủ có dữ liệu nhạy cảm, nên lưu ở nơi an toàn và không gửi cho người khác.
 
 ## Chạy ứng dụng
 
