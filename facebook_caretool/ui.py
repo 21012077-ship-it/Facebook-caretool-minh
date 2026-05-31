@@ -3011,12 +3011,14 @@ class FacebookCareTool(ctk.CTk):
 
 
     def is_captcha_visible(self, page):
-        captcha_selectors = (
+        verification_selectors = (
             'iframe[src*="captcha" i], iframe[title*="captcha" i], iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i]',
             '[id*="captcha" i], [class*="captcha" i], [data-testid*="captcha" i]',
             'text=/captcha|recaptcha|hcaptcha|security check|kiểm tra bảo mật|xác minh bảo mật/i',
+            'text=/complete a challenge|verify you[’\']?re a human|solve a puzzle|try audio challenge/i',
+            'text=/hoàn thành thử thách|xác minh bạn là người thật|giải câu đố|thử thách âm thanh/i',
         )
-        for selector in captcha_selectors:
+        for selector in verification_selectors:
             try:
                 if page.locator(selector).first.is_visible(timeout=1000):
                     return True
@@ -3029,31 +3031,80 @@ class FacebookCareTool(ctk.CTk):
             return True
 
         self.after(0, lambda: self.append_live_log(
-            f"[{uid}] ⚠️ Phát hiện CAPTCHA. Vui lòng xác minh thủ công trong {timeout_seconds} giây..."
+            f"[{uid}] ⚠️ Phát hiện CAPTCHA/thử thách xác minh người thật. "
+            f"Vui lòng xác minh thủ công trong {timeout_seconds} giây..."
         ))
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
             if self.is_task_stopped():
                 return False
             if not self.is_captcha_visible(page):
-                self.after(0, lambda: self.append_live_log(f"[{uid}] ✅ CAPTCHA đã được xác minh, tiếp tục xử lý 2FA..."))
+                self.after(0, lambda: self.append_live_log(
+                    f"[{uid}] ✅ Thử thách xác minh đã được xử lý, tiếp tục xử lý 2FA..."
+                ))
                 return True
             try:
                 if self.has_facebook_login_cookie(page.context.cookies()):
-                    self.after(0, lambda: self.append_live_log(f"[{uid}] ✅ Đã có cookie đăng nhập sau khi xác minh CAPTCHA."))
+                    self.after(0, lambda: self.append_live_log(
+                        f"[{uid}] ✅ Đã có cookie đăng nhập sau khi xác minh người thật."
+                    ))
                     return True
             except Exception:
                 pass
             time.sleep(2)
 
         self.after(0, lambda: self.append_live_log(
-            f"[{uid}] ❌ CAPTCHA chưa được xác minh sau {timeout_seconds} giây. Đóng phiên đăng nhập này."
+            f"[{uid}] ❌ Chưa xác minh người thật sau {timeout_seconds} giây. Đóng phiên đăng nhập này."
         ))
         try:
             page.context.close()
         except Exception:
             pass
         return False
+
+    def get_two_fa_box(self, page):
+        return page.locator(
+            'input[aria-label="Mã"], '
+            'input[aria-label="Login code"], '
+            'input[aria-label="Code"], '
+            'input[autocomplete="one-time-code"], '
+            'input[id="approvals_code"], '
+            'input[type="text"]'
+        ).locator("visible=true").first
+
+    def wait_for_two_fa_box_or_login(self, page, context, uid, timeout_seconds=60):
+        self.after(0, lambda: self.append_live_log(
+            f"[{uid}] Đang chờ form nhập mã 2FA hiển thị tối đa {timeout_seconds} giây..."
+        ))
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if self.is_task_stopped():
+                return None
+            try:
+                if self.is_facebook_success_url(page.url) and self.has_facebook_login_cookie(context.cookies()):
+                    self.after(0, lambda: self.append_live_log(
+                        f"[{uid}] ✅ Đã đăng nhập thành công trong lúc chờ 2FA."
+                    ))
+                    return "logged_in"
+            except Exception:
+                pass
+
+            two_fa_box = self.get_two_fa_box(page)
+            try:
+                if two_fa_box.is_visible(timeout=1000):
+                    return two_fa_box
+            except Exception:
+                pass
+            time.sleep(2)
+
+        self.after(0, lambda: self.append_live_log(
+            f"[{uid}] ❌ Không thấy form 2FA sau {timeout_seconds} giây. Đóng phiên đăng nhập này."
+        ))
+        try:
+            page.context.close()
+        except Exception:
+            pass
+        return None
 
     # --- HÀM MỚI: KIỂM TRA VÀ TỰ ĐỘNG ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE ---
     def ensure_login(self, context, page, account):
@@ -3114,27 +3165,23 @@ class FacebookCareTool(ctk.CTk):
             self.after(0, self.refresh_accounts)
             return True
 
-        # 3. Quét form 2FA (Bản cập nhật thông minh - Chờ tối đa 15 giây)
+        # 3. Quét form 2FA. Nếu không thấy 2FA thì chờ thêm 60 giây rồi đóng phiên.
+        two_fa_box = self.wait_for_two_fa_box_or_login(page, context, uid, timeout_seconds=60)
+        if two_fa_box == "logged_in":
+            account["status"] = "active"
+            self.save_account_cookies(account, context.cookies())
+            self.save_accounts()
+            self.after(0, self.refresh_accounts)
+            return True
+
+        if two_fa_box is None:
+            account["status"] = "checkpoint"
+            self.save_accounts()
+            self.after(0, self.refresh_accounts)
+            raise Exception("Không thấy form 2FA sau 60 giây, đã đóng phiên đăng nhập.")
+
         try:
-            self.after(0, lambda: self.append_live_log(f"[{uid}] Đang chờ form nhập mã 2FA hiển thị..."))
-
-            # Vẫn giữ 1 chút sleep để tránh việc Playwright quét quá nhanh khi form đang chớp nháy
-            time.sleep(3)
-
-            # Gom thêm các bộ chọn (locator) phổ biến của Facebook 2FA
-            two_fa_box = page.locator(
-                'input[aria-label="Mã"], '
-                'input[aria-label="Login code"], '
-                'input[aria-label="Code"], '
-                'input[autocomplete="one-time-code"], '
-                'input[id="approvals_code"], '
-                'input[type="text"]'
-            ).locator("visible=true").first
-
-            # SỬ DỤNG WAIT_FOR: Ép trình duyệt liên tục quét tìm ô 2FA trong tối đa 15 giây
-            two_fa_box.wait_for(state="visible", timeout=15000)
-
-            # Nếu code vượt qua được dòng wait_for bên trên, nghĩa là ô 2FA chắc chắn đã hiển thị
+            # Nếu code tới đây, nghĩa là ô 2FA chắc chắn đã hiển thị
             code = generate_totp_code(two_fa)
             if code:
                 self.after(0, lambda: self.append_live_log(f"[{uid}] Đã sinh mã: {code}. Đang nhập..."))
@@ -3169,9 +3216,16 @@ class FacebookCareTool(ctk.CTk):
             else:
                 self.after(0, lambda: self.append_live_log(f"[{uid}] ❌ Lỗi: Mã Secret 2FA không tạo được 6 số. Kiểm tra lại chuỗi 2FA!"))
 
-        except Exception as e:
-            # Nếu hết 15 giây mà wait_for() vẫn không tìm thấy ô nhập 2FA, nó sẽ nhảy xuống đây
-            self.after(0, lambda: self.append_live_log(f"[{uid}] Không bắt được ô 2FA (Có thể không cần hoặc timeout). Bỏ qua..."))
+        except Exception:
+            self.after(0, lambda: self.append_live_log(f"[{uid}] Không nhập được mã 2FA. Đóng phiên đăng nhập này..."))
+            try:
+                page.context.close()
+            except Exception:
+                pass
+            account["status"] = "checkpoint"
+            self.save_accounts()
+            self.after(0, self.refresh_accounts)
+            raise Exception("Không nhập được mã 2FA, đã đóng phiên đăng nhập.")
 
         try:
             page.wait_for_url("**/facebook.com/**", timeout=15000)
