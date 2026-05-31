@@ -3,7 +3,15 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from facebook_caretool.account_io import build_export_payload, merge_accounts, parse_import_payload
+from facebook_caretool.account_io import (
+    build_export_payload,
+    build_full_backup_payload,
+    merge_accounts,
+    parse_import_payload,
+    restore_full_backup,
+    save_full_backup_file,
+    load_full_backup_file,
+)
 from facebook_caretool.care_planner import build_care_plan, format_care_plan, recommend_care_profile
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
@@ -272,6 +280,57 @@ class AccountImportExportTest(unittest.TestCase):
         merged, stats = merge_accounts(current, imported, overwrite=True)
         self.assertEqual(stats, {"added": 1, "updated": 1, "skipped": 0})
         self.assertEqual(merged[0]["note"], "new")
+
+    def test_full_backup_includes_accounts_logs_settings_and_cookie_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            cookie_path = root / "cookies" / "1.json"
+            cookie_path.parent.mkdir()
+            cookie_path.write_text('[{"name": "c_user", "value": "1"}]', encoding="utf-8")
+            backup_path = root / "backup.json"
+
+            save_full_backup_file(
+                backup_path,
+                [{"name": "A", "uid": "1", "password": "secret", "two_fa": "ABC", "cookie_file": "cookies/1.json"}],
+                [{"account": "A", "status": "done", "action": "care"}],
+                {"default_home_url": "https://m.facebook.com/"},
+                base_dir=root,
+            )
+
+            payload = load_full_backup_file(backup_path)
+            self.assertEqual(payload["accounts"][0]["password"], "secret")
+            self.assertEqual(payload["accounts"][0]["two_fa"], "ABC")
+            self.assertEqual(payload["logs"][0]["action"], "care")
+            self.assertEqual(payload["settings"]["default_home_url"], "https://m.facebook.com/")
+            self.assertEqual(payload["files"][0]["path"], "cookies/1.json")
+
+    def test_restore_full_backup_merges_accounts_and_restores_cookie(self):
+        with tempfile.TemporaryDirectory() as source_tmp, tempfile.TemporaryDirectory() as target_tmp:
+            source_root = Path(source_tmp)
+            cookie_path = source_root / "cookies" / "1.json"
+            cookie_path.parent.mkdir()
+            cookie_path.write_text('[{"name": "xs", "value": "token"}]', encoding="utf-8")
+            payload = build_full_backup_payload(
+                [{"name": "A", "uid": "1", "cookie_file": "cookies/1.json"}],
+                [{"account": "A", "status": "done"}],
+                {"default_home_url": "https://facebook.com/"},
+                base_dir=source_root,
+            )
+
+            accounts, logs, settings, stats = restore_full_backup(
+                payload,
+                [],
+                [],
+                {},
+                base_dir=target_tmp,
+            )
+
+            self.assertEqual(accounts[0]["uid"], "1")
+            self.assertEqual(logs[0]["status"], "done")
+            self.assertEqual(settings["default_home_url"], "https://facebook.com/")
+            self.assertEqual(stats["added"], 1)
+            self.assertEqual(stats["files_restored"], 1)
+            self.assertTrue((Path(target_tmp) / "cookies" / "1.json").exists())
 
 
 class AnalyticsTest(unittest.TestCase):
