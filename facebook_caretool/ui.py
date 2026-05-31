@@ -2825,6 +2825,15 @@ class FacebookCareTool(ctk.CTk):
     def has_facebook_login_cookie(self, cookies):
         return self.automation_service.has_facebook_login_cookie(cookies)
 
+    def is_real_facebook_checkpoint_url(self, url):
+        return self.automation_service.is_real_facebook_checkpoint_url(url)
+
+    def is_facebook_login_or_security_url(self, url):
+        return self.automation_service.is_facebook_login_or_security_url(url)
+
+    def is_facebook_success_url(self, url):
+        return self.automation_service.is_facebook_success_url(url)
+
     def build_cookie_snapshot(self, cookies):
         tracked_fields = ("name", "value", "domain", "path", "expires", "expirationDate")
         return tuple(
@@ -2903,6 +2912,52 @@ class FacebookCareTool(ctk.CTk):
             return f"https://www.facebook.com/profile.php?id={raw_uid}"
         return f"https://www.facebook.com/{raw_uid}"
 
+
+    def is_captcha_visible(self, page):
+        captcha_selectors = (
+            'iframe[src*="captcha" i], iframe[title*="captcha" i], iframe[src*="recaptcha" i], iframe[src*="hcaptcha" i]',
+            '[id*="captcha" i], [class*="captcha" i], [data-testid*="captcha" i]',
+            'text=/captcha|recaptcha|hcaptcha|security check|kiểm tra bảo mật|xác minh bảo mật/i',
+        )
+        for selector in captcha_selectors:
+            try:
+                if page.locator(selector).first.is_visible(timeout=1000):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def wait_for_captcha_resolution(self, page, uid, timeout_seconds=60):
+        if not self.is_captcha_visible(page):
+            return True
+
+        self.after(0, lambda: self.append_live_log(
+            f"[{uid}] ⚠️ Phát hiện CAPTCHA. Vui lòng xác minh thủ công trong {timeout_seconds} giây..."
+        ))
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            if self.is_task_stopped():
+                return False
+            if not self.is_captcha_visible(page):
+                self.after(0, lambda: self.append_live_log(f"[{uid}] ✅ CAPTCHA đã được xác minh, tiếp tục xử lý 2FA..."))
+                return True
+            try:
+                if self.has_facebook_login_cookie(page.context.cookies()):
+                    self.after(0, lambda: self.append_live_log(f"[{uid}] ✅ Đã có cookie đăng nhập sau khi xác minh CAPTCHA."))
+                    return True
+            except Exception:
+                pass
+            time.sleep(2)
+
+        self.after(0, lambda: self.append_live_log(
+            f"[{uid}] ❌ CAPTCHA chưa được xác minh sau {timeout_seconds} giây. Đóng phiên đăng nhập này."
+        ))
+        try:
+            page.context.close()
+        except Exception:
+            pass
+        return False
+
     # --- HÀM MỚI: KIỂM TRA VÀ TỰ ĐỘNG ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE ---
     def ensure_login(self, context, page, account):
         uid = account.get("uid", "")
@@ -2913,8 +2968,10 @@ class FacebookCareTool(ctk.CTk):
         self.goto_facebook_home(page, account=account, mobile=True)
         time.sleep(3)
 
-        # Nếu không bị đá ra trang đăng nhập/checkpoint/two_step -> Cookie vẫn sống
-        if "login" not in page.url and "checkpoint" not in page.url and "two_step_verification" not in page.url:
+        # Nếu không bị đá ra trang đăng nhập/checkpoint/two_step -> Cookie vẫn sống.
+        # Lưu ý: Facebook có thể trả về /?checkpoint_src=any sau khi login thành công;
+        # query này không được tính là checkpoint thật.
+        if self.is_facebook_success_url(page.url):
             if page.locator("input[name='email'], input[id='email']").is_hidden():
                 return True
 
@@ -2942,8 +2999,23 @@ class FacebookCareTool(ctk.CTk):
         # 2. Bấm phím Enter ngay tại ô mật khẩu để Submit Form
         pass_input.press("Enter")
 
-        self.after(0, lambda: self.append_live_log(f"[{uid}] Đã ấn Enter, chờ load 2FA..."))
-        time.sleep(8) # Tăng thời gian chờ lên 8s để đảm bảo mạng load xong trang 2FA
+        self.after(0, lambda: self.append_live_log(f"[{uid}] Đã ấn Enter, chờ load 2FA/CAPTCHA..."))
+        time.sleep(8) # Tăng thời gian chờ lên 8s để đảm bảo mạng load xong trang 2FA/CAPTCHA
+
+        if not self.wait_for_captcha_resolution(page, uid, timeout_seconds=60):
+            account["status"] = "checkpoint"
+            self.save_accounts()
+            self.after(0, self.refresh_accounts)
+            raise Exception("Captcha chưa được xác minh sau 60 giây, đã đóng phiên đăng nhập.")
+
+        # Nếu CAPTCHA được xác minh xong và đã đăng nhập luôn, lưu cookie ngay.
+        if self.is_facebook_success_url(page.url) and self.has_facebook_login_cookie(context.cookies()):
+            self.after(0, lambda: self.append_live_log(f"[{uid}] Đăng nhập thành công sau CAPTCHA! Đang lưu cookie mới..."))
+            account["status"] = "active"
+            self.save_account_cookies(account, context.cookies())
+            self.save_accounts()
+            self.after(0, self.refresh_accounts)
+            return True
 
         # 3. Quét form 2FA (Bản cập nhật thông minh - Chờ tối đa 15 giây)
         try:
@@ -3009,8 +3081,9 @@ class FacebookCareTool(ctk.CTk):
         except:
             pass
 
-        # Kiểm tra lại URL xem đã vào được bên trong chưa
-        if "login" in page.url or "checkpoint" in page.url or "two_step_verification" in page.url:
+        # Kiểm tra lại URL xem đã vào được bên trong chưa.
+        # /?checkpoint_src=any là trang chủ sau login thành công, không phải checkpoint thật.
+        if self.is_facebook_login_or_security_url(page.url):
             account["status"] = "checkpoint"
             self.save_accounts()
             self.after(0, self.refresh_accounts)

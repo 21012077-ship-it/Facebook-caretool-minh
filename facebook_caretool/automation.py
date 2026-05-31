@@ -5,6 +5,7 @@ import os
 import random
 import re
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from .utils import parse_proxy
 
@@ -109,6 +110,45 @@ class AutomationService:
 
         account["cookie_file"] = cookie_file
         return cookie_file
+
+
+    def is_real_facebook_checkpoint_url(self, url: str | None) -> bool:
+        """Return True only for actual Facebook checkpoint routes.
+
+        Facebook can append ``?checkpoint_src=any`` to the normal homepage after a
+        successful login.  That query parameter alone must not be treated as a
+        checkpoint.
+        """
+        if not url:
+            return False
+
+        parsed = urlparse(url)
+        path = (parsed.path or "/").lower()
+        if "checkpoint" in path:
+            return True
+
+        return False
+
+    def is_facebook_login_or_security_url(self, url: str | None) -> bool:
+        if not url:
+            return False
+
+        parsed = urlparse(url)
+        path = (parsed.path or "/").lower()
+        full_url = url.lower()
+        return (
+            "login" in path
+            or "two_step_verification" in full_url
+            or self.is_real_facebook_checkpoint_url(url)
+        )
+
+    def is_facebook_success_url(self, url: str | None) -> bool:
+        if not url:
+            return False
+
+        parsed = urlparse(url)
+        host = (parsed.netloc or "").lower()
+        return "facebook.com" in host and not self.is_facebook_login_or_security_url(url)
 
     def has_facebook_login_cookie(self, cookies: List[Dict[str, Any]]) -> bool:
         return any(
