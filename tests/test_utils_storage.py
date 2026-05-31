@@ -191,6 +191,21 @@ class AutomationServiceTest(unittest.TestCase):
         ]))
 
 
+    def test_checkpoint_src_query_on_homepage_is_not_checkpoint(self):
+        service = AutomationService()
+
+        self.assertFalse(service.is_real_facebook_checkpoint_url("https://www.facebook.com/?checkpoint_src=any"))
+        self.assertTrue(service.is_facebook_success_url("https://www.facebook.com/?checkpoint_src=any"))
+        self.assertFalse(service.is_facebook_login_or_security_url("https://www.facebook.com/?checkpoint_src=any"))
+
+    def test_real_checkpoint_path_is_security_url(self):
+        service = AutomationService()
+
+        self.assertTrue(service.is_real_facebook_checkpoint_url("https://www.facebook.com/checkpoint/?next"))
+        self.assertTrue(service.is_facebook_login_or_security_url("https://www.facebook.com/checkpoint/?next"))
+        self.assertFalse(service.is_facebook_success_url("https://www.facebook.com/checkpoint/?next"))
+
+
 class JsonStorageTest(unittest.TestCase):
     def test_load_save_json_helpers(self):
         with tempfile.TemporaryDirectory() as tmp:
