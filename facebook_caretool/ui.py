@@ -39,6 +39,9 @@ ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = ""
 ACCOUNT_RENDER_BATCH_SIZE = 60
+ACCOUNT_VIRTUALIZE_THRESHOLD = 120
+ACCOUNT_ROW_ESTIMATED_HEIGHT = 58
+ACCOUNT_RENDER_BUFFER_ROWS = 8
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
 
@@ -80,7 +83,13 @@ class FacebookCareTool(ctk.CTk):
         self.comment_content_save_job = None
         self.account_refresh_job = None
         self.account_render_job = None
+        self.account_scroll_update_job = None
         self.account_render_generation = 0
+        self.account_virtual_mode = False
+        self.account_filtered_snapshot = []
+        self.account_visible_range = (-1, -1)
+        self.account_top_spacer = None
+        self.account_bottom_spacer = None
         self.history_refresh_job = None
         self.history_render_job = None
         self.history_render_generation = 0
@@ -294,6 +303,7 @@ class FacebookCareTool(ctk.CTk):
 
         self.account_container = ctk.CTkScrollableFrame(self.table_outer, fg_color="transparent", corner_radius=0)
         self.account_container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.setup_smart_account_scroll()
 
         self.live_log_box = ctk.CTkFrame(left_care, fg_color="#020617", corner_radius=14)
         self.live_log_box.grid(row=4, column=0, sticky="ew", padx=25, pady=(0, 15))
@@ -2516,33 +2526,106 @@ class FacebookCareTool(ctk.CTk):
             self.after_cancel(self.account_refresh_job)
         self.account_refresh_job = self.after(180, self.refresh_accounts)
 
+    def setup_smart_account_scroll(self):
+        canvas = getattr(self.account_container, "_parent_canvas", None)
+        scrollbar = getattr(self.account_container, "_scrollbar", None)
+        if canvas is None or scrollbar is None:
+            return
+
+        def schedule_after_scroll(event=None):
+            self.schedule_account_visible_render(delay=12)
+
+        original_set = scrollbar.set
+
+        def smart_scrollbar_set(first, last):
+            original_set(first, last)
+            self.schedule_account_visible_render(delay=12)
+
+        def smart_scroll_command(*args):
+            canvas.yview(*args)
+            self.schedule_account_visible_render(delay=12)
+
+        canvas.configure(yscrollcommand=smart_scrollbar_set)
+        scrollbar.configure(command=smart_scroll_command)
+        canvas.bind("<Configure>", schedule_after_scroll, add="+")
+        canvas.bind("<MouseWheel>", schedule_after_scroll, add="+")
+        canvas.bind("<Button-4>", schedule_after_scroll, add="+")
+        canvas.bind("<Button-5>", schedule_after_scroll, add="+")
+        canvas.bind("<ButtonRelease-1>", schedule_after_scroll, add="+")
+
     def _cancel_account_render_job(self):
         if self.account_render_job:
             self.after_cancel(self.account_render_job)
             self.account_render_job = None
+        if self.account_scroll_update_job:
+            self.after_cancel(self.account_scroll_update_job)
+            self.account_scroll_update_job = None
+
+    def _clear_account_container(self):
+        for widget in self.account_container.winfo_children():
+            widget.destroy()
+        self.account_rows = {}
+        self.account_top_spacer = None
+        self.account_bottom_spacer = None
+        self.account_visible_range = (-1, -1)
+
+    def _get_account_canvas(self):
+        return getattr(self.account_container, "_parent_canvas", None)
 
     def refresh_accounts(self):
         self.account_refresh_job = None
         self._cancel_account_render_job()
         self.account_render_generation += 1
         generation = self.account_render_generation
+        canvas = self._get_account_canvas()
+        scroll_fraction = canvas.yview()[0] if canvas is not None else 0
 
-        for widget in self.account_container.winfo_children():
-            widget.destroy()
+        self._clear_account_container()
 
-        self.account_rows = {}
         filtered = self.get_filtered_accounts()
         valid_indexes = set(range(len(self.accounts)))
         self.selected_accounts = {i for i in self.selected_accounts if i in valid_indexes}
         self.update_dashboard()
 
         if not filtered:
+            self.account_virtual_mode = False
             ctk.CTkLabel(
                 self.account_container, text="Chưa có tài khoản nào.", font=("Arial", 16)
             ).pack(pady=40)
             return
 
         total = len(filtered)
+        if total >= ACCOUNT_VIRTUALIZE_THRESHOLD:
+            self.account_virtual_mode = True
+            self.account_filtered_snapshot = filtered
+            ctk.CTkLabel(
+                self.account_container,
+                text=f"Danh sách thông minh: chỉ dựng các dòng đang nhìn thấy trong {total} tài khoản để cuộn mượt hơn.",
+                text_color="#9ca3af",
+            ).pack(fill="x", padx=4, pady=(0, 8))
+            self.account_top_spacer = ctk.CTkFrame(self.account_container, fg_color="transparent", height=0)
+            self.account_top_spacer.pack(fill="x")
+            self.account_top_spacer.pack_propagate(False)
+            self.account_bottom_spacer = ctk.CTkFrame(
+                self.account_container,
+                fg_color="transparent",
+                height=total * ACCOUNT_ROW_ESTIMATED_HEIGHT,
+            )
+            self.account_bottom_spacer.pack(fill="x")
+            self.account_bottom_spacer.pack_propagate(False)
+
+            def restore_and_render():
+                if generation != self.account_render_generation:
+                    return
+                if canvas is not None:
+                    canvas.yview_moveto(scroll_fraction)
+                self.render_visible_account_rows(force=True)
+
+            self.account_render_job = self.after_idle(restore_and_render)
+            return
+
+        self.account_virtual_mode = False
+        self.account_filtered_snapshot = []
         if total > ACCOUNT_RENDER_BATCH_SIZE:
             ctk.CTkLabel(
                 self.account_container,
@@ -2560,8 +2643,55 @@ class FacebookCareTool(ctk.CTk):
                 self.account_render_job = self.after(1, lambda: render_batch(end))
             else:
                 self.account_render_job = None
+                if canvas is not None:
+                    canvas.yview_moveto(scroll_fraction)
 
         render_batch()
+
+    def schedule_account_visible_render(self, delay=16):
+        if not self.account_virtual_mode:
+            return
+        if self.account_scroll_update_job:
+            self.after_cancel(self.account_scroll_update_job)
+        self.account_scroll_update_job = self.after(delay, self.render_visible_account_rows)
+
+    def render_visible_account_rows(self, force=False):
+        self.account_scroll_update_job = None
+        if not self.account_virtual_mode or not self.account_filtered_snapshot:
+            return
+
+        canvas = self._get_account_canvas()
+        if canvas is None:
+            return
+
+        total = len(self.account_filtered_snapshot)
+        canvas_height = max(canvas.winfo_height(), ACCOUNT_ROW_ESTIMATED_HEIGHT * 8)
+        scroll_top = max(canvas.canvasy(0), 0)
+        header_offset = 32
+        start = max(int((scroll_top - header_offset) // ACCOUNT_ROW_ESTIMATED_HEIGHT) - ACCOUNT_RENDER_BUFFER_ROWS, 0)
+        visible_count = int(canvas_height // ACCOUNT_ROW_ESTIMATED_HEIGHT) + (ACCOUNT_RENDER_BUFFER_ROWS * 2) + 4
+        end = min(start + visible_count, total)
+
+        if not force and (start, end) == self.account_visible_range:
+            return
+
+        for widget in list(self.account_rows.values()):
+            widget.destroy()
+        self.account_rows = {}
+
+        if self.account_top_spacer is not None:
+            self.account_top_spacer.configure(height=start * ACCOUNT_ROW_ESTIMATED_HEIGHT)
+        if self.account_bottom_spacer is not None:
+            self.account_bottom_spacer.pack_forget()
+
+        for row, (index, acc) in enumerate(self.account_filtered_snapshot[start:end], start=start):
+            self.account_row(row, index, acc)
+
+        if self.account_bottom_spacer is not None:
+            self.account_bottom_spacer.configure(height=max((total - end) * ACCOUNT_ROW_ESTIMATED_HEIGHT, 0))
+            self.account_bottom_spacer.pack(fill="x")
+
+        self.account_visible_range = (start, end)
 
     def account_row(self, row, index, acc):
         row_frame = ctk.CTkFrame(
