@@ -54,6 +54,11 @@ python -m playwright install chromium
 - `socks4://host:port`, `http://host:port`, `https://host:port`
 - `socks5:host:port:user:pass` hoặc `host:port:user:pass:socks5`
 
+Trong màn hình **Thêm tài khoản hàng loạt**, có thể nhập proxy auth dạng `proxy:port:username:password` theo một trong hai cách:
+
+- Có 2FA: `uid|pass|2fa|proxy:port:username:password`
+- Không có 2FA: `uid|pass|proxy:port:username:password`
+
 
 
 ## ChatGPT thủ công tạo comment trong app desktop
