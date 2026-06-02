@@ -8,6 +8,8 @@ from facebook_caretool.account_io import (
     build_full_backup_payload,
     merge_accounts,
     parse_bulk_account_lines,
+    parse_facebook_cookie_header,
+    persist_imported_cookie_files,
     parse_import_payload,
     restore_full_backup,
     save_full_backup_file,
@@ -301,6 +303,43 @@ class AccountImportExportTest(unittest.TestCase):
         self.assertEqual(stats["invalid"], 0)
         self.assertEqual(accounts[0]["two_fa"], "ABC123")
         self.assertEqual(accounts[0]["proxy"], "proxy.local:3128:user:secret")
+
+    def test_parse_facebook_cookie_header_converts_semicolon_cookie_string(self):
+        cookies = parse_facebook_cookie_header("c_user=61587794387376;xs=15:token;fr=value;datr=abc;")
+
+        self.assertEqual([cookie["name"] for cookie in cookies], ["c_user", "xs", "fr", "datr"])
+        self.assertEqual(cookies[0]["value"], "61587794387376")
+        self.assertEqual(cookies[0]["domain"], ".facebook.com")
+        self.assertEqual(cookies[0]["path"], "/")
+
+    def test_parse_bulk_account_lines_accepts_uid_pass_2fa_cookies_proxy(self):
+        cookie_header = "c_user=61587794387376;xs=15:token;fr=value;datr=abc;"
+        accounts, stats = parse_bulk_account_lines(f"61587794387376|pass|ABC123|{cookie_header}|127.0.0.1:8080")
+
+        self.assertEqual(stats["valid"], 1)
+        self.assertEqual(stats["invalid"], 0)
+        self.assertEqual(accounts[0]["uid"], "61587794387376")
+        self.assertEqual(accounts[0]["password"], "pass")
+        self.assertEqual(accounts[0]["two_fa"], "ABC123")
+        self.assertEqual(accounts[0]["proxy"], "127.0.0.1:8080")
+        self.assertEqual(accounts[0]["cookie_file"], "cookies/61587794387376.json")
+        self.assertEqual(accounts[0]["_import_cookies"][0]["name"], "c_user")
+
+    def test_parse_bulk_account_lines_accepts_standalone_cookies_and_persists_them(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cookie_dir = str(Path(tmp) / "cookies")
+            accounts, stats = parse_bulk_account_lines(
+                "c_user=61587794387376;xs=15:token;fr=value;datr=abc;",
+                cookie_dir=cookie_dir,
+            )
+
+            self.assertEqual(stats["valid"], 1)
+            self.assertEqual(accounts[0]["uid"], "61587794387376")
+            self.assertEqual(persist_imported_cookie_files(accounts, cookie_dir=cookie_dir), 1)
+            self.assertNotIn("_import_cookies", accounts[0])
+            cookie_path = Path(accounts[0]["cookie_file"])
+            self.assertTrue(cookie_path.exists())
+            self.assertIn('"name": "c_user"', cookie_path.read_text(encoding="utf-8"))
 
     def test_parse_bulk_account_lines_reports_missing_uid(self):
         accounts, stats = parse_bulk_account_lines("|pass|2fa|proxy\n10003|pass")

@@ -13,6 +13,65 @@ EXPORT_VERSION = 1
 FULL_BACKUP_VERSION = 1
 BACKUP_FILE_TYPE = "full_backup"
 
+FACEBOOK_COOKIE_DOMAIN = ".facebook.com"
+FACEBOOK_LOGIN_COOKIE_NAMES = {"c_user", "xs"}
+FACEBOOK_KNOWN_COOKIE_NAMES = {"c_user", "xs", "fr", "datr", "sb", "wd", "presence"}
+IMPORT_COOKIES_KEY = "_import_cookies"
+
+
+def parse_facebook_cookie_header(cookie_header: str) -> List[Dict[str, Any]]:
+    """Convert a browser-style Facebook cookie header into Playwright cookies.
+
+    Accepts strings such as ``c_user=123;xs=token;fr=value;datr=value;``.
+    Invalid/empty fragments are ignored so pasted cookie headers with trailing
+    semicolons are handled gracefully.
+    """
+
+    cookies: List[Dict[str, Any]] = []
+    for fragment in str(cookie_header or "").split(";"):
+        item = fragment.strip()
+        if not item or "=" not in item:
+            continue
+        name, value = item.split("=", 1)
+        name = name.strip()
+        if not name:
+            continue
+        cookies.append(
+            {
+                "name": name,
+                "value": value.strip(),
+                "domain": FACEBOOK_COOKIE_DOMAIN,
+                "path": "/",
+                "httpOnly": name in FACEBOOK_LOGIN_COOKIE_NAMES,
+                "secure": True,
+                "sameSite": "Lax",
+            }
+        )
+    return cookies
+
+
+def _cookie_value(cookies: Iterable[Dict[str, Any]], name: str) -> str:
+    for cookie in cookies:
+        if str(cookie.get("name") or "") == name:
+            return str(cookie.get("value") or "").strip()
+    return ""
+
+
+def _looks_like_facebook_cookie_header(value: str) -> bool:
+    cookies = parse_facebook_cookie_header(value)
+    if not cookies:
+        return False
+    names = {str(cookie.get("name") or "") for cookie in cookies}
+    return bool(
+        names & FACEBOOK_LOGIN_COOKIE_NAMES
+        or (";" in str(value or "") and names & FACEBOOK_KNOWN_COOKIE_NAMES)
+    )
+
+
+def _account_cookie_path(uid: str, cookie_dir: str) -> str:
+    safe_uid = str(uid or "").strip() or "account"
+    return f"{cookie_dir.rstrip('/')}/{safe_uid}.json" if cookie_dir else ""
+
 
 def normalize_accounts(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [Account.from_dict(item).to_dict() for item in items if isinstance(item, dict)]
@@ -62,6 +121,83 @@ def _looks_like_proxy(value: str) -> bool:
     return bool(value)
 
 
+def _build_bulk_account(
+    *,
+    uid: str,
+    password: str,
+    two_fa: str,
+    proxy: str,
+    cookie_header: str,
+    status: str,
+    note: str,
+    care_profile: str,
+    cookie_dir: str,
+) -> Dict[str, Any]:
+    cookies = parse_facebook_cookie_header(cookie_header) if cookie_header else []
+    cookie_uid = _cookie_value(cookies, "c_user")
+    account_uid = uid or cookie_uid
+    account = Account.from_dict(
+        {
+            "name": account_uid,
+            "uid": account_uid,
+            "password": password,
+            "two_fa": two_fa,
+            "status": status,
+            "note": note,
+            "proxy": proxy,
+            "cookie_file": _account_cookie_path(account_uid, cookie_dir) if account_uid else "",
+            "care_profile": care_profile,
+        }
+    ).to_dict()
+    if cookies:
+        account[IMPORT_COOKIES_KEY] = cookies
+    return account
+
+
+def _split_bulk_fields(parts: List[str]) -> Tuple[str, str, str]:
+    """Return ``two_fa, cookie_header, proxy`` for fields after UID/password."""
+
+    if not parts:
+        return "", "", ""
+
+    two_fa = ""
+    cookie_header = ""
+    proxy = ""
+
+    if len(parts) == 1:
+        value = parts[0]
+        if _looks_like_facebook_cookie_header(value):
+            cookie_header = value
+        elif _looks_like_proxy(value):
+            proxy = value
+        else:
+            two_fa = value
+        return two_fa, cookie_header, proxy
+
+    if len(parts) == 2:
+        first, second = parts
+        if _looks_like_facebook_cookie_header(first):
+            cookie_header = first
+            proxy = second
+        elif _looks_like_facebook_cookie_header(second):
+            two_fa = first
+            cookie_header = second
+        elif _looks_like_proxy(first) and not second:
+            proxy = first
+        else:
+            two_fa = first
+            proxy = second
+        return two_fa, cookie_header, proxy
+
+    two_fa = parts[0]
+    if _looks_like_facebook_cookie_header(parts[1]):
+        cookie_header = parts[1]
+        proxy = "|".join(parts[2:]).strip()
+    else:
+        proxy = "|".join(parts[1:]).strip()
+    return two_fa, cookie_header, proxy
+
+
 def parse_bulk_account_lines(
     raw_text: str,
     *,
@@ -70,12 +206,15 @@ def parse_bulk_account_lines(
     care_profile: str = "auto",
     cookie_dir: str = "cookies",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """Parse newline-separated accounts in UID|pass|2FA|proxy format.
+    """Parse newline-separated accounts with optional Facebook cookies.
 
-    Blank lines are ignored. The password, 2FA and proxy fields may be left
-    empty, but UID is required so duplicates can be detected during merge.
-    If the third field looks like a proxy and there is no fourth field, it is
-    treated as proxy so ``UID|pass|host:port:user:pass`` is accepted.
+    Supported formats:
+
+    * ``UID|pass|2FA|proxy``
+    * ``UID|pass|proxy`` when the third field looks like a proxy
+    * ``UID|pass|2FA|cookies|proxy``
+    * ``UID|pass|cookies|proxy`` when the third field looks like cookies
+    * a standalone Facebook cookie header; UID is read from ``c_user``
     """
 
     accounts: List[Dict[str, Any]] = []
@@ -86,34 +225,51 @@ def parse_bulk_account_lines(
         if not line:
             continue
 
+        if "|" not in line and _looks_like_facebook_cookie_header(line):
+            cookies = parse_facebook_cookie_header(line)
+            uid = _cookie_value(cookies, "c_user")
+            if not uid:
+                invalid_lines.append({"line": line_number, "content": raw_line, "reason": "Cookie thiếu c_user để lấy UID"})
+                continue
+            accounts.append(
+                _build_bulk_account(
+                    uid=uid,
+                    password="",
+                    two_fa="",
+                    proxy="",
+                    cookie_header=line,
+                    status=status,
+                    note=note,
+                    care_profile=care_profile,
+                    cookie_dir=cookie_dir,
+                )
+            )
+            continue
+
         parts = [part.strip() for part in line.split("|")]
         uid = parts[0] if parts else ""
+        password = parts[1] if len(parts) > 1 else ""
+        two_fa, cookie_header, proxy = _split_bulk_fields(parts[2:])
+
+        if not uid and cookie_header:
+            uid = _cookie_value(parse_facebook_cookie_header(cookie_header), "c_user")
+
         if not uid:
             invalid_lines.append({"line": line_number, "content": raw_line, "reason": "Thiếu UID"})
             continue
 
-        password = parts[1] if len(parts) > 1 else ""
-        two_fa = parts[2] if len(parts) > 2 else ""
-        proxy = "|".join(parts[3:]).strip() if len(parts) > 3 else ""
-
-        if len(parts) == 3 and _looks_like_proxy(two_fa):
-            proxy = two_fa
-            two_fa = ""
-
         accounts.append(
-            Account.from_dict(
-                {
-                    "name": uid,
-                    "uid": uid,
-                    "password": password,
-                    "two_fa": two_fa,
-                    "status": status,
-                    "note": note,
-                    "proxy": proxy,
-                    "cookie_file": f"{cookie_dir.rstrip('/')}/{uid}.json" if cookie_dir else "",
-                    "care_profile": care_profile,
-                }
-            ).to_dict()
+            _build_bulk_account(
+                uid=uid,
+                password=password,
+                two_fa=two_fa,
+                proxy=proxy,
+                cookie_header=cookie_header,
+                status=status,
+                note=note,
+                care_profile=care_profile,
+                cookie_dir=cookie_dir,
+            )
         )
 
     stats: Dict[str, Any] = {
@@ -123,6 +279,35 @@ def parse_bulk_account_lines(
         "invalid_lines": invalid_lines,
     }
     return accounts, stats
+
+
+def persist_imported_cookie_files(accounts: Iterable[Dict[str, Any]], cookie_dir: str = "cookies") -> int:
+    """Write transient cookies parsed from bulk import to each account's cookie file."""
+
+    saved = 0
+    for account in accounts:
+        if not isinstance(account, dict):
+            continue
+        cookies = account.pop(IMPORT_COOKIES_KEY, None)
+        if not cookies:
+            continue
+        uid = str(account.get("uid") or account.get("name") or "").strip()
+        cookie_file = str(account.get("cookie_file") or "").strip() or _account_cookie_path(uid, cookie_dir)
+        if not cookie_file:
+            continue
+        Path(cookie_file).parent.mkdir(parents=True, exist_ok=True)
+        save_json(cookie_file, cookies)
+        account["cookie_file"] = cookie_file
+        saved += 1
+    return saved
+
+
+def _normalize_account_preserving_import_cookies(item: Dict[str, Any]) -> Dict[str, Any]:
+    account = Account.from_dict(item).to_dict()
+    cookies = item.get(IMPORT_COOKIES_KEY)
+    if isinstance(cookies, list) and cookies:
+        account[IMPORT_COOKIES_KEY] = cookies
+    return account
 
 
 def merge_accounts(
@@ -139,7 +324,10 @@ def merge_accounts(
         if key:
             index_by_key[key] = index
 
-    for imported in normalize_accounts(imported_accounts):
+    for item in imported_accounts:
+        if not isinstance(item, dict):
+            continue
+        imported = _normalize_account_preserving_import_cookies(item)
         key = account_identity(imported)
         existing_index = index_by_key.get(key) if key else None
         if existing_index is None:
