@@ -54,6 +54,82 @@ def load_import_accounts(path: str | Path) -> List[Dict[str, Any]]:
     return parse_import_payload(load_json(path, {}))
 
 
+def normalize_bulk_proxy_fields(proxy_fields: List[str]) -> str:
+    """Normalize proxy columns from bulk account lines.
+
+    The bulk input still uses `|` between account fields, so users may paste the
+    proxy either as one field (`host:port:user:pass`) or as several extra fields
+    (`host|port|user|pass`). Joining extra proxy fields with `:` keeps the value
+    compatible with the app's existing proxy parser.
+    """
+
+    cleaned_fields = [field.strip() for field in proxy_fields if field.strip()]
+    if not cleaned_fields:
+        return ""
+    if len(cleaned_fields) == 1:
+        return cleaned_fields[0]
+    return ":".join(cleaned_fields)
+
+
+def parse_bulk_account_lines(
+    raw_text: str,
+    *,
+    status: str = "active",
+    note: str = "",
+    care_profile: str = "auto",
+    cookie_dir: str = "cookies",
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Parse newline-separated accounts in UID|pass|2FA|proxy format.
+
+    Blank lines are ignored. The password, 2FA and proxy fields may be left
+    empty, but UID is required so duplicates can be detected during merge. Proxy
+    may be one field (`host:port:user:pass`) or split across fields
+    (`host|port|user|pass`).
+    """
+
+    accounts: List[Dict[str, Any]] = []
+    invalid_lines: List[Dict[str, Any]] = []
+
+    for line_number, raw_line in enumerate(str(raw_text or "").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        parts = [part.strip() for part in line.split("|")]
+        uid = parts[0] if parts else ""
+        if not uid:
+            invalid_lines.append({"line": line_number, "content": raw_line, "reason": "Thiếu UID"})
+            continue
+
+        password = parts[1] if len(parts) > 1 else ""
+        two_fa = parts[2] if len(parts) > 2 else ""
+        proxy = normalize_bulk_proxy_fields(parts[3:]) if len(parts) > 3 else ""
+
+        accounts.append(
+            Account.from_dict(
+                {
+                    "name": uid,
+                    "uid": uid,
+                    "password": password,
+                    "two_fa": two_fa,
+                    "status": status,
+                    "note": note,
+                    "proxy": proxy,
+                    "cookie_file": f"{cookie_dir.rstrip('/')}/{uid}.json" if cookie_dir else "",
+                    "care_profile": care_profile,
+                }
+            ).to_dict()
+        )
+
+    stats: Dict[str, Any] = {
+        "total_lines": len(str(raw_text or "").splitlines()),
+        "valid": len(accounts),
+        "invalid": len(invalid_lines),
+        "invalid_lines": invalid_lines,
+    }
+    return accounts, stats
+
+
 def merge_accounts(
     current_accounts: Iterable[Dict[str, Any]],
     imported_accounts: Iterable[Dict[str, Any]],

@@ -7,6 +7,8 @@ from facebook_caretool.account_io import (
     build_export_payload,
     build_full_backup_payload,
     merge_accounts,
+    normalize_bulk_proxy_fields,
+    parse_bulk_account_lines,
     parse_import_payload,
     restore_full_backup,
     save_full_backup_file,
@@ -268,6 +270,39 @@ class AccountImportExportTest(unittest.TestCase):
     def test_parse_import_payload_accepts_wrapped_accounts(self):
         accounts = parse_import_payload({"accounts": [{"name": "A", "status": "active"}]})
         self.assertEqual(accounts[0]["name"], "A")
+
+    def test_parse_bulk_account_lines_accepts_uid_pass_2fa_proxy(self):
+        accounts, stats = parse_bulk_account_lines("10001|pass1|ABC123|127.0.0.1:8080\n10002|pass2||socks5://host:1080")
+
+        self.assertEqual(stats["valid"], 2)
+        self.assertEqual(stats["invalid"], 0)
+        self.assertEqual(accounts[0]["name"], "10001")
+        self.assertEqual(accounts[0]["uid"], "10001")
+        self.assertEqual(accounts[0]["password"], "pass1")
+        self.assertEqual(accounts[0]["two_fa"], "ABC123")
+        self.assertEqual(accounts[0]["proxy"], "127.0.0.1:8080")
+        self.assertEqual(accounts[0]["cookie_file"], "cookies/10001.json")
+        self.assertEqual(accounts[1]["two_fa"], "")
+        self.assertEqual(accounts[1]["proxy"], "socks5://host:1080")
+
+    def test_parse_bulk_account_lines_accepts_split_proxy_host_port_auth(self):
+        accounts, stats = parse_bulk_account_lines("10004|pass4|TOTP|127.0.0.1|8080|user|p:a:s:s")
+
+        self.assertEqual(stats["valid"], 1)
+        self.assertEqual(stats["invalid"], 0)
+        self.assertEqual(accounts[0]["proxy"], "127.0.0.1:8080:user:p:a:s:s")
+
+    def test_normalize_bulk_proxy_fields_preserves_single_proxy_field(self):
+        self.assertEqual(normalize_bulk_proxy_fields(["socks5://host:1080"]), "socks5://host:1080")
+        self.assertEqual(normalize_bulk_proxy_fields(["host", "1080", "user", "pass"]), "host:1080:user:pass")
+
+    def test_parse_bulk_account_lines_reports_missing_uid(self):
+        accounts, stats = parse_bulk_account_lines("|pass|2fa|proxy\n10003|pass")
+
+        self.assertEqual(len(accounts), 1)
+        self.assertEqual(stats["valid"], 1)
+        self.assertEqual(stats["invalid"], 1)
+        self.assertEqual(stats["invalid_lines"][0]["line"], 1)
 
     def test_merge_accounts_skips_or_overwrites_duplicates(self):
         current = [{"name": "A", "uid": "1", "note": "old"}]

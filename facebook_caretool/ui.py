@@ -10,6 +10,7 @@ from .account_io import (
     load_full_backup_file,
     load_import_accounts,
     merge_accounts,
+    parse_bulk_account_lines,
     restore_full_backup,
     save_export_file,
     save_full_backup_file,
@@ -120,6 +121,15 @@ class FacebookCareTool(ctk.CTk):
 
     def save_logs(self):
         self.storage.save_logs(self.logs)
+
+    def refresh_account_dependent_views(self):
+        self.refresh_accounts()
+        if hasattr(self, "cmt_acc_scroll"):
+            self.refresh_comment_accounts()
+        if hasattr(self, "browser_accounts_scroll"):
+            self.refresh_browser_accounts()
+        if hasattr(self, "settings_data_label"):
+            self.refresh_settings_info()
 
     # --- UI CORE & ĐIỀU HƯỚNG ---
     def build_ui(self):
@@ -241,8 +251,12 @@ class FacebookCareTool(ctk.CTk):
         self.search_entry.bind("<KeyRelease>", self.schedule_accounts_refresh)
 
         ctk.CTkButton(
-            header, text="+ Thêm tài khoản", height=42, width=160, command=self.add_account_popup
-        ).grid(row=0, column=2)
+            header, text="+ Thêm lẻ", height=42, width=120, command=self.add_account_popup
+        ).grid(row=0, column=2, padx=(0, 8))
+
+        ctk.CTkButton(
+            header, text="☰ Thêm hàng loạt", height=42, width=150, fg_color="#7c3aed", command=self.add_bulk_accounts_popup
+        ).grid(row=0, column=3)
 
         self.dashboard = ctk.CTkFrame(left_care, fg_color="transparent")
         self.dashboard.grid(row=1, column=0, sticky="ew", padx=25, pady=(5, 8))
@@ -2779,10 +2793,108 @@ class FacebookCareTool(ctk.CTk):
             else: self.accounts[edit_index] = account
 
             self.save_accounts()
-            self.refresh_accounts()
+            self.refresh_account_dependent_views()
             popup.destroy()
 
         ctk.CTkButton(popup, text="Lưu", width=360, height=40, command=save).pack(pady=25)
+
+    def add_bulk_accounts_popup(self):
+        popup = ctk.CTkToplevel(self)
+        popup.title("Thêm tài khoản hàng loạt")
+        popup.geometry("620x700")
+        popup.grab_set()
+
+        ctk.CTkLabel(
+            popup,
+            text="Dán danh sách tài khoản, mỗi dòng một tài khoản",
+            font=("Arial", 18, "bold"),
+        ).pack(pady=(20, 6))
+        ctk.CTkLabel(
+            popup,
+            text=(
+                "Định dạng: uid|pass|2fa|proxy hoặc uid|pass|2fa|host|port|username|password\n"
+                "Ví dụ: 1000123456789|matkhau|JBSWY3DPEHPK3PXP|127.0.0.1|8080|user|pass"
+            ),
+            text_color="#cbd5e1",
+            justify="left",
+            wraplength=560,
+        ).pack(pady=(0, 12))
+
+        bulk_text = ctk.CTkTextbox(popup, width=560, height=300, wrap="none")
+        bulk_text.pack(padx=20, pady=(0, 12), fill="both", expand=True)
+
+        options = ctk.CTkFrame(popup, fg_color="transparent")
+        options.pack(fill="x", padx=20)
+        options.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(options, text="Trạng thái").grid(row=0, column=0, sticky="w", padx=(0, 10), pady=6)
+        status_var = ctk.StringVar(value="active")
+        ctk.CTkOptionMenu(options, width=220, variable=status_var, values=["active", "checkpoint", "cookie_error"]).grid(row=0, column=1, sticky="w", pady=6)
+
+        ctk.CTkLabel(options, text="Kiểu nuôi").grid(row=1, column=0, sticky="w", padx=(0, 10), pady=6)
+        profile_values = [f"{key} - {label}" for key, label in CARE_PROFILE_LABELS.items()]
+        profile_lookup = {value: value.split(" - ", 1)[0] for value in profile_values}
+        profile_var = ctk.StringVar(value=profile_values[0])
+        ctk.CTkOptionMenu(options, width=320, variable=profile_var, values=profile_values).grid(row=1, column=1, sticky="w", pady=6)
+
+        ctk.CTkLabel(options, text="Ghi chú chung").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=6)
+        note_entry = ctk.CTkEntry(options, width=360, placeholder_text="Ví dụ: nhập hàng loạt 02/06")
+        note_entry.grid(row=2, column=1, sticky="ew", pady=6)
+
+        overwrite_var = ctk.BooleanVar(value=bool(self.app_settings.get("import_overwrite_default", False)))
+        ctk.CTkCheckBox(
+            popup,
+            text="Ghi đè account trùng UID (nếu tắt sẽ bỏ qua account trùng)",
+            variable=overwrite_var,
+        ).pack(anchor="w", padx=20, pady=(12, 4))
+
+        preview_label = ctk.CTkLabel(popup, text="", text_color="#fbbf24", justify="left", wraplength=560)
+        preview_label.pack(fill="x", padx=20, pady=(8, 0))
+
+        def preview():
+            accounts, parse_stats = parse_bulk_account_lines(
+                bulk_text.get("1.0", "end-1c"),
+                status=status_var.get(),
+                note=note_entry.get().strip(),
+                care_profile=profile_lookup.get(profile_var.get(), "auto"),
+            )
+            invalid_preview = ""
+            if parse_stats["invalid_lines"]:
+                invalid_items = ", ".join(str(item["line"]) for item in parse_stats["invalid_lines"][:8])
+                invalid_preview = f" | Dòng lỗi: {invalid_items}"
+            preview_label.configure(text=f"Hợp lệ: {len(accounts)} | Lỗi: {parse_stats['invalid']}{invalid_preview}")
+            return accounts, parse_stats
+
+        def save_bulk():
+            accounts, parse_stats = preview()
+            if not accounts:
+                messagebox.showerror("Lỗi", "Không có tài khoản hợp lệ. Vui lòng nhập theo định dạng uid|pass|2fa|proxy hoặc uid|pass|2fa|host|port|username|password.")
+                return
+            if parse_stats["invalid"] and not messagebox.askyesno(
+                "Có dòng lỗi",
+                f"Có {parse_stats['invalid']} dòng thiếu UID hoặc không hợp lệ. Bạn có muốn bỏ qua các dòng lỗi và tiếp tục thêm {len(accounts)} account hợp lệ không?",
+            ):
+                return
+
+            if not os.path.exists("cookies"):
+                os.makedirs("cookies")
+            backup_path = backup_accounts_file(ACCOUNTS_FILE)
+            self.accounts, merge_stats = merge_accounts(self.accounts, accounts, overwrite=overwrite_var.get())
+            self.save_accounts()
+            self.refresh_account_dependent_views()
+            popup.destroy()
+            backup_note = f"\nBackup cũ: {backup_path}" if backup_path else ""
+            messagebox.showinfo(
+                "Thêm hàng loạt hoàn tất",
+                f"Hợp lệ: {parse_stats['valid']} | Dòng lỗi: {parse_stats['invalid']}\n"
+                f"Thêm: {merge_stats['added']} | Cập nhật: {merge_stats['updated']} | Bỏ qua trùng: {merge_stats['skipped']}"
+                f"{backup_note}",
+            )
+
+        action_row = ctk.CTkFrame(popup, fg_color="transparent")
+        action_row.pack(fill="x", padx=20, pady=20)
+        ctk.CTkButton(action_row, text="Xem số lượng", width=150, fg_color="#374151", command=preview).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(action_row, text="Thêm vào tool", width=190, height=42, fg_color="#16a34a", command=save_bulk).pack(side="right")
 
     def edit_selected_account(self):
         if self.selected_index is None:
