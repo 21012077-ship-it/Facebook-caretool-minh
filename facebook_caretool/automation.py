@@ -150,6 +150,28 @@ class AutomationService:
         host = (parsed.netloc or "").lower()
         return "facebook.com" in host and not self.is_facebook_login_or_security_url(url)
 
+
+    def looks_like_logged_out_landing_text(self, text: str | None) -> bool:
+        """Detect Facebook's logged-out saved-profile landing screen from text.
+
+        This page can live on ``facebook.com`` and has no email input, so URL-only
+        checks may incorrectly treat it as an authenticated home page.
+        """
+        compact = " ".join(str(text or "").lower().split())
+        if not compact:
+            return False
+
+        continue_terms = ("continue", "tiếp tục", "continuer")
+        switch_terms = ("use another profile", "dùng trang cá nhân khác", "sử dụng tài khoản khác", "log into another account")
+        create_terms = ("create new account", "tạo tài khoản mới", "créer un compte")
+        brand_terms = ("meta", "facebook")
+
+        return (
+            any(term in compact for term in continue_terms)
+            and (any(term in compact for term in switch_terms) or any(term in compact for term in create_terms))
+            and any(term in compact for term in brand_terms)
+        )
+
     def has_facebook_login_cookie(self, cookies: List[Dict[str, Any]]) -> bool:
         return any(
             cookie.get("name") == "c_user" and "facebook.com" in str(cookie.get("domain", ""))

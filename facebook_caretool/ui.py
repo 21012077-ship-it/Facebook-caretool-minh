@@ -2711,15 +2711,25 @@ class FacebookCareTool(ctk.CTk):
     def add_account_popup(self, edit_index=None):
         popup = ctk.CTkToplevel(self)
         popup.title("Thêm tài khoản" if edit_index is None else "Sửa tài khoản")
-        popup.geometry("470x620")
+        popup.geometry("470x720")
         popup.grab_set()
 
         current = self.accounts[edit_index] if edit_index is not None else {}
 
-        ctk.CTkLabel(popup, text="Dữ liệu (UID|Pass|2FA) hoặc Tên").pack(pady=(20, 5))
-        name_entry = ctk.CTkEntry(popup, width=360, placeholder_text="Ví dụ: 1000...|abc123|ABCDEF...")
+        ctk.CTkLabel(popup, text="UID / Tên hoặc dán nhanh UID|Pass|2FA").pack(pady=(20, 5))
+        name_entry = ctk.CTkEntry(popup, width=360, placeholder_text="Ví dụ: 1000... hoặc 1000...|abc123|ABCDEF...")
         name_entry.pack()
-        name_entry.insert(0, current.get("name", ""))
+        name_entry.insert(0, current.get("uid") or current.get("name", ""))
+
+        ctk.CTkLabel(popup, text="Mật khẩu").pack(pady=(15, 5))
+        password_entry = ctk.CTkEntry(popup, width=360, show="*", placeholder_text="Có thể bỏ trống nếu dùng cookie")
+        password_entry.pack()
+        password_entry.insert(0, current.get("password", ""))
+
+        ctk.CTkLabel(popup, text="2FA secret").pack(pady=(15, 5))
+        two_fa_entry = ctk.CTkEntry(popup, width=360, placeholder_text="Ví dụ: ABCDEF... (không bắt buộc)")
+        two_fa_entry.pack()
+        two_fa_entry.insert(0, current.get("two_fa", ""))
 
         ctk.CTkLabel(popup, text="Trạng thái").pack(pady=(15, 5))
         status_var = ctk.StringVar(value=current.get("status", "active"))
@@ -2758,14 +2768,38 @@ class FacebookCareTool(ctk.CTk):
                 messagebox.showerror("Lỗi", "Vui lòng nhập Dữ liệu / Tên")
                 return
 
-            uid, password, two_fa, name = "", "", "", raw_data
-            # Tự động trích xuất thông tin nếu nhập định dạng UID|Pass|2FA
+            explicit_password = password_entry.get().strip()
+            explicit_two_fa = two_fa_entry.get().strip()
+            uid, password, two_fa, name = "", explicit_password, explicit_two_fa, raw_data
+            imported_cookies = None
+
+            # Tự động trích xuất thông tin nếu nhập định dạng UID|Pass|2FA(|cookie|proxy).
+            # Ô mật khẩu/2FA riêng luôn được ưu tiên nếu người dùng có nhập/sửa tại popup.
             if "|" in raw_data:
-                parts = raw_data.split("|")
-                uid = parts[0].strip()
-                password = parts[1].strip() if len(parts) > 1 else ""
-                two_fa = parts[2].strip() if len(parts) > 2 else ""
-                name = uid # Gán tên hiển thị là UID luôn
+                parsed_accounts, _ = parse_bulk_account_lines(raw_data)
+                if parsed_accounts:
+                    parsed_account = parsed_accounts[0]
+                    uid = parsed_account.get("uid", "")
+                    name = parsed_account.get("name", uid or raw_data)
+                    password = explicit_password or parsed_account.get("password", "")
+                    two_fa = explicit_two_fa or parsed_account.get("two_fa", "")
+                    imported_cookies = parsed_account.get("_import_cookies")
+                    if parsed_account.get("proxy") and not proxy_entry.get().strip():
+                        proxy_entry.delete(0, "end")
+                        proxy_entry.insert(0, parsed_account.get("proxy", ""))
+                else:
+                    parts = [part.strip() for part in raw_data.split("|")]
+                    uid = parts[0] if parts else ""
+                    name = uid or raw_data
+                    password = explicit_password or (parts[1] if len(parts) > 1 else "")
+                    two_fa = explicit_two_fa or (parts[2] if len(parts) > 2 else "")
+            else:
+                uid = raw_data
+
+            # Khi sửa account cũ, không xóa nhầm mật khẩu/2FA nếu người dùng chỉ sửa tên/UID.
+            if edit_index is not None:
+                password = password or current.get("password", "")
+                two_fa = two_fa or current.get("two_fa", "")
 
             # Xử lý tự động tạo đường dẫn cookie nếu người dùng không chọn file
             cookie_path = cookie_var.get().strip()
@@ -2789,6 +2823,10 @@ class FacebookCareTool(ctk.CTk):
                 "care_profile": profile_lookup.get(profile_var.get(), "auto"),
                 "care_plan_note": current.get("care_plan_note", "")
             }
+
+            if imported_cookies:
+                account["_import_cookies"] = imported_cookies
+                persist_imported_cookie_files([account])
 
             if edit_index is None: self.accounts.append(account)
             else: self.accounts[edit_index] = account
@@ -3310,6 +3348,67 @@ class FacebookCareTool(ctk.CTk):
 
         return False
 
+
+    def is_logged_out_landing_page(self, page):
+        """Nhận diện màn hình Facebook đã đăng xuất nhưng vẫn ở facebook.com.
+
+        Ví dụ màn hình có nút Continue/Tiếp tục theo profile đã lưu và nút
+        Use another profile. Màn này không có ô email nên check URL/ô email cũ
+        dễ nhầm là đã đăng nhập.
+        """
+        try:
+            body_text = page.locator("body").inner_text(timeout=2000)
+            if self.automation_service.looks_like_logged_out_landing_text(body_text):
+                return True
+        except Exception:
+            pass
+
+        logged_out_selectors = (
+            'text=/Use another profile|Dùng trang cá nhân khác|Sử dụng tài khoản khác|Log into another account/i',
+            'text=/Create new account|Tạo tài khoản mới/i',
+        )
+        for selector in logged_out_selectors:
+            try:
+                if page.locator(selector).first.is_visible(timeout=700):
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def open_normal_login_form(self, page, account):
+        """Đưa Facebook về form email/pass nếu đang ở màn Continue profile."""
+        switch_selectors = (
+            'div[role="button"]:has-text("Use another profile")',
+            'button:has-text("Use another profile")',
+            'text=/Use another profile/i',
+            'div[role="button"]:has-text("Dùng trang cá nhân khác")',
+            'button:has-text("Dùng trang cá nhân khác")',
+            'text=/Dùng trang cá nhân khác|Sử dụng tài khoản khác|Đăng nhập bằng tài khoản khác/i',
+            'text=/Log into another account/i',
+        )
+        email_selector = 'input[name="email"], input[id="email"]'
+        pass_selector = 'input[name="pass"], input[id="pass"]'
+
+        for selector in switch_selectors:
+            try:
+                button = page.locator(selector).locator("visible=true").first
+                if button.is_visible(timeout=700):
+                    button.click(no_wait_after=True)
+                    time.sleep(2)
+                    break
+            except Exception:
+                continue
+
+        try:
+            if page.locator(email_selector).first.is_visible(timeout=2000) and page.locator(pass_selector).first.is_visible(timeout=2000):
+                return True
+        except Exception:
+            pass
+
+        self.safe_goto(page, "https://facebook.com/login/", account=account, fallback_urls=["https://www.facebook.com/login/", "https://m.facebook.com/login/"])
+        time.sleep(2)
+        return True
+
     def ensure_login(self, context, page, account):
         uid = account.get("uid", "")
         password = account.get("password", "")
@@ -3323,8 +3422,10 @@ class FacebookCareTool(ctk.CTk):
         # Lưu ý: Facebook có thể trả về /?checkpoint_src=any sau khi login thành công;
         # query này không được tính là checkpoint thật.
         if self.is_facebook_success_url(page.url):
-            if page.locator("input[name='email'], input[id='email']").is_hidden():
+            if page.locator("input[name='email'], input[id='email']").is_hidden() and not self.is_logged_out_landing_page(page):
                 return True
+            if self.is_logged_out_landing_page(page):
+                self.after(0, lambda: self.append_live_log(f"[{uid}] Phát hiện Facebook đã đăng xuất (màn Continue profile), đang đăng nhập lại..."))
 
         # Nếu rơi xuống đây tức là Cookie đã chết HOẶC chưa từng có Cookie
         if not uid or not password:
@@ -3335,9 +3436,7 @@ class FacebookCareTool(ctk.CTk):
 
         self.after(0, lambda: self.append_live_log(f"[{uid}] Cookie trống/die, đang tự động đăng nhập..."))
 
-        if "login" not in page.url:
-            self.safe_goto(page, "https://facebook.com/login/", account=account, fallback_urls=["https://www.facebook.com/login/", "https://m.facebook.com/login/"])
-            time.sleep(2)
+        self.open_normal_login_form(page, account)
 
         # 1. Điền tài khoản, mật khẩu
         page.locator('input[name="email"], input[id="email"]').first.fill(uid)
