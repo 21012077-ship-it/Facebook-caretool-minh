@@ -11,6 +11,7 @@ from .account_io import (
     load_import_accounts,
     merge_accounts,
     parse_bulk_account_lines,
+    persist_imported_cookie_files,
     restore_full_backup,
     save_export_file,
     save_full_backup_file,
@@ -2812,8 +2813,8 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(
             popup,
             text=(
-                "Định dạng: uid|pass|2fa|proxy hoặc uid|pass|proxy nếu không có 2FA\n"
-                "Ví dụ proxy auth: 1000123456789|matkhau|proxy.local:3128:user:pass"
+                "Định dạng: uid|pass|2fa|proxy, uid|pass|2fa|cookies|proxy, hoặc dán riêng chuỗi cookies\n"
+                "Ví dụ cookies: 1000123456789|matkhau|ABC123|c_user=...;xs=...;fr=...;datr=...;|proxy.local:3128:user:pass"
             ),
             text_color="#cbd5e1",
             justify="left",
@@ -2868,7 +2869,7 @@ class FacebookCareTool(ctk.CTk):
         def save_bulk():
             accounts, parse_stats = preview()
             if not accounts:
-                messagebox.showerror("Lỗi", "Không có tài khoản hợp lệ. Vui lòng nhập theo định dạng uid|pass|2fa|proxy.")
+                messagebox.showerror("Lỗi", "Không có tài khoản hợp lệ. Vui lòng nhập uid|pass|2fa|proxy, uid|pass|2fa|cookies|proxy hoặc dán chuỗi cookies có c_user.")
                 return
             if parse_stats["invalid"] and not messagebox.askyesno(
                 "Có dòng lỗi",
@@ -2880,6 +2881,7 @@ class FacebookCareTool(ctk.CTk):
                 os.makedirs("cookies")
             backup_path = backup_accounts_file(ACCOUNTS_FILE)
             self.accounts, merge_stats = merge_accounts(self.accounts, accounts, overwrite=overwrite_var.get())
+            saved_cookie_count = persist_imported_cookie_files(self.accounts)
             self.save_accounts()
             self.refresh_account_dependent_views()
             popup.destroy()
@@ -2887,7 +2889,8 @@ class FacebookCareTool(ctk.CTk):
             messagebox.showinfo(
                 "Thêm hàng loạt hoàn tất",
                 f"Hợp lệ: {parse_stats['valid']} | Dòng lỗi: {parse_stats['invalid']}\n"
-                f"Thêm: {merge_stats['added']} | Cập nhật: {merge_stats['updated']} | Bỏ qua trùng: {merge_stats['skipped']}"
+                f"Thêm: {merge_stats['added']} | Cập nhật: {merge_stats['updated']} | Bỏ qua trùng: {merge_stats['skipped']}\n"
+                f"Đã lưu file cookie: {saved_cookie_count}"
                 f"{backup_note}",
             )
 
