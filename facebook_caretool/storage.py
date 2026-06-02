@@ -69,6 +69,8 @@ class SQLiteStorage:
                     status TEXT NOT NULL,
                     note TEXT,
                     proxy TEXT,
+                    proxy_changed_at TEXT,
+                    proxy_action_locked_until TEXT,
                     cookie_file TEXT,
                     created_at TEXT,
                     last_open TEXT,
@@ -80,6 +82,8 @@ class SQLiteStorage:
             )
             existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(accounts)").fetchall()}
             for column, definition in {
+                "proxy_changed_at": "TEXT",
+                "proxy_action_locked_until": "TEXT",
                 "care_profile": "TEXT",
                 "care_plan_note": "TEXT",
             }.items():
@@ -111,8 +115,8 @@ class SQLiteStorage:
             conn.execute("DELETE FROM accounts")
             conn.executemany(
                 """
-                INSERT INTO accounts (name, uid, password, two_fa, status, note, proxy, cookie_file, created_at, last_open, last_care, care_profile, care_plan_note)
-                VALUES (:name, :uid, :password, :two_fa, :status, :note, :proxy, :cookie_file, :created_at, :last_open, :last_care, :care_profile, :care_plan_note)
+                INSERT INTO accounts (name, uid, password, two_fa, status, note, proxy, proxy_changed_at, proxy_action_locked_until, cookie_file, created_at, last_open, last_care, care_profile, care_plan_note)
+                VALUES (:name, :uid, :password, :two_fa, :status, :note, :proxy, :proxy_changed_at, :proxy_action_locked_until, :cookie_file, :created_at, :last_open, :last_care, :care_profile, :care_plan_note)
                 """,
                 clean_accounts,
             )

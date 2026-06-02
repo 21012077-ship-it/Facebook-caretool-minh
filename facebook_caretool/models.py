@@ -1,16 +1,85 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
-from typing import Any, Dict
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional
 
 
 ACCOUNT_STATUSES = {"active", "checkpoint", "cookie_error"}
 CARE_PROFILES = {"auto", "warmup", "balanced", "reels_focus", "newsfeed_focus", "rest", "manual"}
+PROXY_ACTION_COOLDOWN_HOURS = 24
+_PROXY_LOCK_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 
 def _now_label() -> str:
     return datetime.now().strftime("%d/%m/%Y %H:%M")
+
+
+def _format_proxy_lock_time(value: datetime) -> str:
+    return value.replace(microsecond=0).strftime(_PROXY_LOCK_TIME_FORMAT)
+
+
+def parse_proxy_lock_time(value: Any) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+
+    for parser in (datetime.fromisoformat,):
+        try:
+            return parser(text)
+        except ValueError:
+            pass
+
+    for date_format in ("%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(text, date_format)
+        except ValueError:
+            pass
+    return None
+
+
+def mark_proxy_changed(account: Dict[str, Any], changed_at: Optional[datetime] = None) -> Dict[str, Any]:
+    """Mark an account as action-locked for 24h after a proxy change."""
+
+    changed_at = changed_at or datetime.now()
+    lock_until = changed_at + timedelta(hours=PROXY_ACTION_COOLDOWN_HOURS)
+    account["proxy_changed_at"] = _format_proxy_lock_time(changed_at)
+    account["proxy_action_locked_until"] = _format_proxy_lock_time(lock_until)
+    return account
+
+
+def proxy_action_lock_until(account: Dict[str, Any]) -> Optional[datetime]:
+    return parse_proxy_lock_time(account.get("proxy_action_locked_until"))
+
+
+def is_proxy_action_locked(account: Dict[str, Any], now: Optional[datetime] = None) -> bool:
+    lock_until = proxy_action_lock_until(account)
+    if lock_until is None:
+        return False
+    return (now or datetime.now()) < lock_until
+
+
+def proxy_lock_remaining_label(account: Dict[str, Any], now: Optional[datetime] = None) -> str:
+    lock_until = proxy_action_lock_until(account)
+    if lock_until is None:
+        return ""
+
+    remaining_seconds = int((lock_until - (now or datetime.now())).total_seconds())
+    if remaining_seconds <= 0:
+        return "0 phút"
+
+    hours, remainder = divmod(remaining_seconds, 3600)
+    minutes = max(1, (remainder + 59) // 60)
+    if hours:
+        return f"{hours} giờ {minutes} phút"
+    return f"{minutes} phút"
+
+
+def proxy_lock_until_label(account: Dict[str, Any]) -> str:
+    lock_until = proxy_action_lock_until(account)
+    if lock_until is None:
+        return ""
+    return lock_until.strftime("%d/%m/%Y %H:%M")
 
 
 @dataclass(slots=True)
@@ -24,6 +93,8 @@ class Account:
     status: str = "active"
     note: str = ""
     proxy: str = ""
+    proxy_changed_at: str = ""
+    proxy_action_locked_until: str = ""
     cookie_file: str = ""
     created_at: str = field(default_factory=_now_label)
     last_open: str = "Chưa mở"
@@ -47,6 +118,8 @@ class Account:
             status=status,
             note=str(data.get("note") or ""),
             proxy=str(data.get("proxy") or ""),
+            proxy_changed_at=str(data.get("proxy_changed_at") or ""),
+            proxy_action_locked_until=str(data.get("proxy_action_locked_until") or ""),
             cookie_file=str(data.get("cookie_file") or ""),
             created_at=str(data.get("created_at") or _now_label()),
             last_open=str(data.get("last_open") or "Chưa mở"),

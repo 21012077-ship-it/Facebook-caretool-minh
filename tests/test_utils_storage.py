@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from facebook_caretool.account_io import (
@@ -18,6 +18,7 @@ from facebook_caretool.account_io import (
 from facebook_caretool.care_planner import build_care_plan, format_care_plan, recommend_care_profile
 from facebook_caretool.analytics import summarize_accounts, summarize_logs
 from facebook_caretool.automation import AutomationService
+from facebook_caretool.models import is_proxy_action_locked, mark_proxy_changed, proxy_lock_remaining_label
 from facebook_caretool.storage import JsonStorage, SQLiteStorage
 from facebook_caretool.utils import (
     build_ai_comment_prompt,
@@ -261,7 +262,9 @@ class JsonStorageTest(unittest.TestCase):
             storage.save_accounts([{"name": "A", "proxy": "127.0.0.1:8080"}])
             storage.save_logs([{"account": "A", "status": "done", "extra": 1}])
 
-            self.assertEqual(storage.load_accounts()[0]["name"], "A")
+            loaded_account = storage.load_accounts()[0]
+            self.assertEqual(loaded_account["name"], "A")
+            self.assertIn("proxy_action_locked_until", loaded_account)
             self.assertEqual(storage.load_logs()[0]["extra"], 1)
 
 
@@ -376,6 +379,27 @@ class AccountImportExportTest(unittest.TestCase):
         merged, stats = merge_accounts(current, imported, overwrite=True)
         self.assertEqual(stats, {"added": 1, "updated": 1, "skipped": 0})
         self.assertEqual(merged[0]["note"], "new")
+
+
+    def test_mark_proxy_changed_locks_account_actions_for_24h(self):
+        changed_at = datetime(2026, 6, 2, 8, 30)
+        account = {"name": "A", "proxy": "new.proxy:8080"}
+
+        mark_proxy_changed(account, changed_at=changed_at)
+
+        self.assertTrue(is_proxy_action_locked(account, now=changed_at + timedelta(hours=23, minutes=59)))
+        self.assertFalse(is_proxy_action_locked(account, now=changed_at + timedelta(hours=24)))
+        self.assertIn("giờ", proxy_lock_remaining_label(account, now=changed_at + timedelta(hours=1)))
+
+    def test_merge_accounts_marks_proxy_change_when_overwriting_duplicate(self):
+        current = [{"name": "A", "uid": "1", "proxy": "old.proxy:8080"}]
+        imported = [{"name": "A", "uid": "1", "proxy": "new.proxy:8080"}]
+
+        merged, stats = merge_accounts(current, imported, overwrite=True)
+
+        self.assertEqual(stats["updated"], 1)
+        self.assertEqual(merged[0]["proxy"], "new.proxy:8080")
+        self.assertTrue(is_proxy_action_locked(merged[0]))
 
     def test_full_backup_includes_accounts_logs_settings_and_cookie_file(self):
         with tempfile.TemporaryDirectory() as tmp:
