@@ -19,6 +19,7 @@ from .account_io import (
 from .analytics import summarize_accounts, summarize_logs
 from .automation import AutomationService
 from .care_planner import CARE_PROFILE_LABELS, build_care_plan, format_care_plan, profile_label
+from .models import is_proxy_action_locked, mark_proxy_changed, proxy_lock_remaining_label, proxy_lock_until_label
 from .storage import JsonStorage
 from .utils import (
     build_ai_comment_prompt,
@@ -122,6 +123,31 @@ class FacebookCareTool(ctk.CTk):
 
     def save_logs(self):
         self.storage.save_logs(self.logs)
+
+    def account_proxy_lock_message(self, account):
+        remaining = proxy_lock_remaining_label(account)
+        lock_until = proxy_lock_until_label(account)
+        detail = f"còn {remaining}"
+        if lock_until:
+            detail = f"{detail}, đến {lock_until}"
+        return (
+            "Tài khoản vừa đổi proxy nên đang khóa mọi thao tác tự động trong 24h; "
+            f"chỉ cho phép mở/đăng nhập. Vui lòng thử lại sau ({detail})."
+        )
+
+    def proxy_action_locked(self, account):
+        return is_proxy_action_locked(account)
+
+    def log_proxy_action_lock(self, account):
+        account_name = account.get("name") or account.get("uid") or "Unknown"
+        message = self.account_proxy_lock_message(account)
+        self.after(0, lambda n=account_name, msg=message: self.append_live_log(f"[{n}] 🔒 {msg}"))
+
+    def ensure_proxy_action_allowed(self, account):
+        if self.proxy_action_locked(account):
+            self.log_proxy_action_lock(account)
+            return False
+        return True
 
     def refresh_account_dependent_views(self):
         self.refresh_accounts()
@@ -758,11 +784,14 @@ class FacebookCareTool(ctk.CTk):
             account_label = acc.get("name", "Không tên")
             if (acc.get("care_profile") or "auto") == "manual":
                 account_label = f"{account_label} • {profile_label('manual')}"
+            if self.proxy_action_locked(acc):
+                account_label = f"🔒 {account_label} • chỉ đăng nhập {proxy_lock_remaining_label(acc)}"
 
-            is_checked = ctk.BooleanVar(value=index in self.comment_selected_accounts)
+            is_checked = ctk.BooleanVar(value=index in self.comment_selected_accounts and not self.proxy_action_locked(acc))
             chk = ctk.CTkCheckBox(
                 row, text=account_label,
                 variable=is_checked,
+                state="disabled" if self.proxy_action_locked(acc) else "normal",
                 command=lambda idx=index, var=is_checked: self.toggle_cmt_acc(idx, var.get())
             )
             chk.pack(side="left", padx=5, pady=5)
@@ -851,6 +880,23 @@ class FacebookCareTool(ctk.CTk):
         ]
 
         selected_indexes = list(self.comment_selected_accounts)
+        locked_names = [
+            self.accounts[index].get("name") or self.accounts[index].get("uid") or "Unknown"
+            for index in selected_indexes
+            if index < len(self.accounts) and self.proxy_action_locked(self.accounts[index])
+        ]
+        selected_indexes = [
+            index for index in selected_indexes
+            if index < len(self.accounts) and not self.proxy_action_locked(self.accounts[index])
+        ]
+        if locked_names:
+            self.append_live_log(
+                "🔒 Bỏ qua account vừa đổi proxy trong chiến dịch comment: "
+                f"{', '.join(locked_names)}. Các account này chỉ được mở/đăng nhập sau 24h."
+            )
+        if not selected_indexes:
+            messagebox.showwarning("Thông báo", "Các tài khoản đang chọn đều vừa đổi proxy và chỉ được đăng nhập trong 24h, chưa được comment.")
+            return
         max_parallel_tabs = min(max_parallel_tabs, len(selected_indexes))
         like_before_comment = self.like_before_cmt_var.get()
 
@@ -1921,6 +1967,8 @@ class FacebookCareTool(ctk.CTk):
 
             account = self.accounts[acc_idx]
             acc_name = account.get("name", "Unknown")
+            if not self.ensure_proxy_action_allowed(account):
+                return
             self.after(0, lambda n=acc_name, count=len(acc_urls): self.append_live_log(f"🚀 [{n}] Được phân công chạy {count} link."))
 
             browser = None
@@ -1931,6 +1979,8 @@ class FacebookCareTool(ctk.CTk):
 
                     # KIỂM TRA & AUTO ĐĂNG NHẬP NẾU CHƯA CÓ COOKIE
                     self.ensure_login(context, page, account)
+                    if not self.ensure_proxy_action_allowed(account):
+                        return
                     account_profile_url = self.resolve_account_profile_url(account)
                     if account_profile_url:
                         self.after(0, lambda n=acc_name, u=account_profile_url: self.append_live_log(f"[{n}] 🧭 Mở profile/fanpage của chính tài khoản trước khi comment: {u}"))
@@ -2599,11 +2649,16 @@ class FacebookCareTool(ctk.CTk):
         name_label.grid(row=0, column=1, sticky="ew", padx=8, pady=10)
 
         proxy_text = acc.get("proxy", "") or "Không dùng proxy"
-        ctk.CTkLabel(row_frame, text=proxy_text, text_color="#cbd5e1", anchor="w").grid(row=0, column=2, sticky="ew", padx=8, pady=10)
+        if self.proxy_action_locked(acc):
+            proxy_text = f"🔒 {proxy_text} • khóa thao tác {proxy_lock_remaining_label(acc)}"
+        ctk.CTkLabel(row_frame, text=proxy_text, text_color="#fbbf24" if self.proxy_action_locked(acc) else "#cbd5e1", anchor="w").grid(row=0, column=2, sticky="ew", padx=8, pady=10)
 
+        status_text = self.status_text(acc.get("status", "active"))
+        if self.proxy_action_locked(acc):
+            status_text = "Chỉ đăng nhập"
         ctk.CTkLabel(
-            row_frame, text=self.status_text(acc.get("status", "active")),
-            fg_color=self.status_color(acc.get("status", "active")),
+            row_frame, text=status_text,
+            fg_color="#92400e" if self.proxy_action_locked(acc) else self.status_color(acc.get("status", "active")),
             corner_radius=8, padx=10, pady=5
         ).grid(row=0, column=3, sticky="w", padx=8, pady=10)
 
@@ -2629,7 +2684,8 @@ class FacebookCareTool(ctk.CTk):
         action_box = ctk.CTkFrame(row_frame, fg_color="transparent")
         action_box.grid(row=0, column=7, sticky="e", padx=8, pady=8)
 
-        ctk.CTkButton(action_box, text="Nuôi", width=58, height=30, command=lambda: self.select_and_care(index)).pack(side="left", padx=3)
+        care_button_state = "disabled" if self.proxy_action_locked(acc) else "normal"
+        ctk.CTkButton(action_box, text="Nuôi", width=58, height=30, state=care_button_state, command=lambda: self.select_and_care(index)).pack(side="left", padx=3)
         ctk.CTkButton(action_box, text="Chi tiết", width=70, height=30, fg_color="#374151", command=lambda: self.select_account(index)).pack(side="left", padx=3)
 
         for widget in row_frame.winfo_children():
@@ -2689,11 +2745,14 @@ class FacebookCareTool(ctk.CTk):
         self.selected_index = index
         acc = self.accounts[index]
         plan = self.get_account_care_plan(acc)
+        proxy_lock_info = ""
+        if self.proxy_action_locked(acc):
+            proxy_lock_info = f"\nKhóa sau đổi proxy: chỉ được đăng nhập, còn {proxy_lock_remaining_label(acc)} (đến {proxy_lock_until_label(acc)})\n"
 
         self.detail_name.configure(text=acc.get("name", "Không tên"))
 
         info = (
-            f"Trạng thái: {self.status_text(acc.get('status', 'active'))}\n\n"
+            f"Trạng thái: {self.status_text(acc.get('status', 'active'))}{proxy_lock_info}\n\n"
             f"Kiểu nuôi riêng: {profile_label(acc.get('care_profile'))}\n"
             f"Gợi ý hiện tại: {format_care_plan(plan)}\n"
             f"Lý do: {plan.get('reason', '')}\n\n"
@@ -2808,6 +2867,7 @@ class FacebookCareTool(ctk.CTk):
                     os.makedirs("cookies")
                 cookie_path = os.path.join("cookies", f"{uid}.json")
 
+            new_proxy = proxy_entry.get().strip()
             account = {
                 "name": name,
                 "uid": uid,
@@ -2815,7 +2875,9 @@ class FacebookCareTool(ctk.CTk):
                 "two_fa": two_fa,
                 "status": status_var.get(),
                 "note": note_entry.get().strip(),
-                "proxy": proxy_entry.get().strip(),
+                "proxy": new_proxy,
+                "proxy_changed_at": current.get("proxy_changed_at", ""),
+                "proxy_action_locked_until": current.get("proxy_action_locked_until", ""),
                 "cookie_file": cookie_path,
                 "created_at": current.get("created_at", datetime.now().strftime("%d/%m/%Y %H:%M")),
                 "last_open": current.get("last_open", "Chưa mở"),
@@ -2823,13 +2885,22 @@ class FacebookCareTool(ctk.CTk):
                 "care_profile": profile_lookup.get(profile_var.get(), "auto"),
                 "care_plan_note": current.get("care_plan_note", "")
             }
+            if edit_index is not None and str(current.get("proxy") or "").strip() != new_proxy:
+                mark_proxy_changed(account)
 
             if imported_cookies:
                 account["_import_cookies"] = imported_cookies
                 persist_imported_cookie_files([account])
 
-            if edit_index is None: self.accounts.append(account)
-            else: self.accounts[edit_index] = account
+            if edit_index is None:
+                self.accounts.append(account)
+            else:
+                self.accounts[edit_index] = account
+                if self.proxy_action_locked(account):
+                    self.append_live_log(
+                        f"🔒 [{account.get('name') or account.get('uid') or 'Unknown'}] Proxy đã thay đổi; "
+                        "account chỉ được đăng nhập và bị chặn thao tác tự động trong 24h."
+                    )
 
             self.save_accounts()
             self.refresh_account_dependent_views()
@@ -3005,6 +3076,12 @@ class FacebookCareTool(ctk.CTk):
         for index in index_list:
             if index < len(self.accounts):
                 account = self.accounts[index]
+                if self.proxy_action_locked(account):
+                    skipped_count += 1
+                    self.append_live_log(
+                        f"🔒 Bỏ qua {account.get('name', 'Unknown')}: vừa đổi proxy nên chỉ được mở/đăng nhập trong 24h, chưa được nuôi."
+                    )
+                    continue
                 plan = self.get_account_care_plan(account, use_smart=use_smart)
                 account["care_plan_note"] = format_care_plan(plan)
                 has_plan_action = (
@@ -3775,6 +3852,13 @@ class FacebookCareTool(ctk.CTk):
 
                 # GỌI HÀM KIỂM TRA ĐĂNG NHẬP Ở ĐÂY
                 self.ensure_login(context, page, account)
+                if not self.ensure_proxy_action_allowed(account):
+                    log_item["status"] = "proxy_locked"
+                    log_item["end_time"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    with self.log_lock:
+                        self.save_logs()
+                    browser.close()
+                    return
 
                 if settings.get("read_notifications") and not self.is_task_stopped():
                     self.read_notifications_for_account(page, account, settings["pause_range"])

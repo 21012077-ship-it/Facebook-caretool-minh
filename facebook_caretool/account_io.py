@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
-from .models import Account, LogEntry
+from .models import Account, LogEntry, mark_proxy_changed
 from .utils import load_json, parse_proxy, save_json
 
 SENSITIVE_FIELDS = {"password", "two_fa"}
@@ -336,6 +336,13 @@ def merge_accounts(
                 index_by_key[key] = len(merged) - 1
             stats["added"] += 1
         elif overwrite:
+            existing_proxy = str(merged[existing_index].get("proxy") or "").strip()
+            imported_proxy = str(imported.get("proxy") or "").strip()
+            if existing_proxy != imported_proxy:
+                mark_proxy_changed(imported)
+            else:
+                imported["proxy_changed_at"] = merged[existing_index].get("proxy_changed_at", "")
+                imported["proxy_action_locked_until"] = merged[existing_index].get("proxy_action_locked_until", "")
             merged[existing_index] = imported
             stats["updated"] += 1
         else:
