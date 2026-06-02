@@ -54,6 +54,63 @@ def load_import_accounts(path: str | Path) -> List[Dict[str, Any]]:
     return parse_import_payload(load_json(path, {}))
 
 
+def parse_bulk_account_lines(
+    raw_text: str,
+    *,
+    status: str = "active",
+    note: str = "",
+    care_profile: str = "auto",
+    cookie_dir: str = "cookies",
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Parse newline-separated accounts in UID|pass|2FA|proxy format.
+
+    Blank lines are ignored. The password, 2FA and proxy fields may be left
+    empty, but UID is required so duplicates can be detected during merge.
+    """
+
+    accounts: List[Dict[str, Any]] = []
+    invalid_lines: List[Dict[str, Any]] = []
+
+    for line_number, raw_line in enumerate(str(raw_text or "").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        parts = [part.strip() for part in line.split("|")]
+        uid = parts[0] if parts else ""
+        if not uid:
+            invalid_lines.append({"line": line_number, "content": raw_line, "reason": "Thiếu UID"})
+            continue
+
+        password = parts[1] if len(parts) > 1 else ""
+        two_fa = parts[2] if len(parts) > 2 else ""
+        proxy = "|".join(parts[3:]).strip() if len(parts) > 3 else ""
+
+        accounts.append(
+            Account.from_dict(
+                {
+                    "name": uid,
+                    "uid": uid,
+                    "password": password,
+                    "two_fa": two_fa,
+                    "status": status,
+                    "note": note,
+                    "proxy": proxy,
+                    "cookie_file": f"{cookie_dir.rstrip('/')}/{uid}.json" if cookie_dir else "",
+                    "care_profile": care_profile,
+                }
+            ).to_dict()
+        )
+
+    stats: Dict[str, Any] = {
+        "total_lines": len(str(raw_text or "").splitlines()),
+        "valid": len(accounts),
+        "invalid": len(invalid_lines),
+        "invalid_lines": invalid_lines,
+    }
+    return accounts, stats
+
+
 def merge_accounts(
     current_accounts: Iterable[Dict[str, Any]],
     imported_accounts: Iterable[Dict[str, Any]],
