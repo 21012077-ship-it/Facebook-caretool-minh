@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .models import Account, LogEntry
-from .utils import load_json, save_json
+from .utils import load_json, parse_proxy, save_json
 
 SENSITIVE_FIELDS = {"password", "two_fa"}
 EXPORT_VERSION = 1
@@ -54,6 +54,14 @@ def load_import_accounts(path: str | Path) -> List[Dict[str, Any]]:
     return parse_import_payload(load_json(path, {}))
 
 
+def _looks_like_proxy(value: str) -> bool:
+    try:
+        parse_proxy(value)
+    except ValueError:
+        return False
+    return bool(value)
+
+
 def parse_bulk_account_lines(
     raw_text: str,
     *,
@@ -66,6 +74,8 @@ def parse_bulk_account_lines(
 
     Blank lines are ignored. The password, 2FA and proxy fields may be left
     empty, but UID is required so duplicates can be detected during merge.
+    If the third field looks like a proxy and there is no fourth field, it is
+    treated as proxy so ``UID|pass|host:port:user:pass`` is accepted.
     """
 
     accounts: List[Dict[str, Any]] = []
@@ -85,6 +95,10 @@ def parse_bulk_account_lines(
         password = parts[1] if len(parts) > 1 else ""
         two_fa = parts[2] if len(parts) > 2 else ""
         proxy = "|".join(parts[3:]).strip() if len(parts) > 3 else ""
+
+        if len(parts) == 3 and _looks_like_proxy(two_fa):
+            proxy = two_fa
+            two_fa = ""
 
         accounts.append(
             Account.from_dict(

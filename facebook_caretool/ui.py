@@ -2811,7 +2811,10 @@ class FacebookCareTool(ctk.CTk):
         ).pack(pady=(20, 6))
         ctk.CTkLabel(
             popup,
-            text="Định dạng: uid|pass|2fa|proxy\nVí dụ: 1000123456789|matkhau|JBSWY3DPEHPK3PXP|127.0.0.1:8080",
+            text=(
+                "Định dạng: uid|pass|2fa|proxy hoặc uid|pass|proxy nếu không có 2FA\n"
+                "Ví dụ proxy auth: 1000123456789|matkhau|proxy.local:3128:user:pass"
+            ),
             text_color="#cbd5e1",
             justify="left",
             wraplength=560,

@@ -284,6 +284,24 @@ class AccountImportExportTest(unittest.TestCase):
         self.assertEqual(accounts[1]["two_fa"], "")
         self.assertEqual(accounts[1]["proxy"], "socks5://host:1080")
 
+    def test_parse_bulk_account_lines_accepts_uid_pass_proxy_without_2fa(self):
+        accounts, stats = parse_bulk_account_lines("10003|pass3|proxy.local:3128:user:secret")
+
+        self.assertEqual(stats["valid"], 1)
+        self.assertEqual(stats["invalid"], 0)
+        self.assertEqual(accounts[0]["uid"], "10003")
+        self.assertEqual(accounts[0]["password"], "pass3")
+        self.assertEqual(accounts[0]["two_fa"], "")
+        self.assertEqual(accounts[0]["proxy"], "proxy.local:3128:user:secret")
+
+    def test_parse_bulk_account_lines_keeps_explicit_2fa_proxy(self):
+        accounts, stats = parse_bulk_account_lines("10004|pass4|ABC123|proxy.local:3128:user:secret")
+
+        self.assertEqual(stats["valid"], 1)
+        self.assertEqual(stats["invalid"], 0)
+        self.assertEqual(accounts[0]["two_fa"], "ABC123")
+        self.assertEqual(accounts[0]["proxy"], "proxy.local:3128:user:secret")
+
     def test_parse_bulk_account_lines_reports_missing_uid(self):
         accounts, stats = parse_bulk_account_lines("|pass|2fa|proxy\n10003|pass")
 
