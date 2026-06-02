@@ -193,6 +193,22 @@ class AutomationServiceTest(unittest.TestCase):
             self.assertEqual(account["cookie_file"], cookie_path)
             self.assertTrue(service.has_facebook_login_cookie(cookies))
 
+
+    def test_logged_out_landing_text_is_not_treated_as_logged_in_home(self):
+        service = AutomationService()
+        self.assertTrue(service.looks_like_logged_out_landing_text(
+            "Facebook Do My Minh Continue Use another profile Create new account Meta"
+        ))
+        self.assertTrue(service.looks_like_logged_out_landing_text(
+            "Facebook Do My Minh Tiếp tục Dùng trang cá nhân khác Tạo tài khoản mới Meta"
+        ))
+
+    def test_logged_out_landing_text_ignores_normal_home_text(self):
+        service = AutomationService()
+        self.assertFalse(service.looks_like_logged_out_landing_text(
+            "Facebook Bảng feed Bạn bè Marketplace Thông báo Messenger"
+        ))
+
     def test_has_facebook_login_cookie_ignores_non_login_cookies(self):
         service = AutomationService()
 
