@@ -44,6 +44,7 @@ DEFAULT_COMMENT_CONTENT = ""
 ACCOUNT_RENDER_BATCH_SIZE = 60
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
+DEFAULT_CHATGPT_PROFILE_DIR = "chatgpt_profile"
 
 
 ctk.set_appearance_mode("dark")
@@ -71,6 +72,7 @@ class FacebookCareTool(ctk.CTk):
         self.task_pause_event.set()
         self.task_stop_event = threading.Event()
         self.log_lock = threading.Lock()
+        self.chatgpt_browser_lock = threading.Lock()
         self.browser_selected_index = None
         self.app_settings = self.load_json("settings.json", {
             "appearance": "dark",
@@ -79,6 +81,7 @@ class FacebookCareTool(ctk.CTk):
             "import_overwrite_default": False,
             "comment_content": DEFAULT_COMMENT_CONTENT,
             "ai_comment_enabled": True,
+            "chatgpt_profile_dir": DEFAULT_CHATGPT_PROFILE_DIR,
         })
         self.comment_content_save_job = None
         self.account_refresh_job = None
@@ -730,13 +733,17 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="ChatGPT thủ công tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Không gọi API OpenAI/Gemini. Tool sẽ mở https://chatgpt.com trong cùng trình duyệt, dùng cookie đăng nhập sẵn, paste prompt + dữ liệu bài đã quét rồi lấy comment trả về.",
+            text="Không gọi API OpenAI/Gemini. Tool sẽ mở một Chrome/profile RIÊNG chỉ dành cho https://chatgpt.com; các Chrome Facebook/tab account sẽ gửi prompt sang Chrome ChatGPT này rồi lấy comment trả về.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
         ).pack(fill="x", padx=18, pady=(0, 10))
         self.ai_comment_enabled_var = ctk.BooleanVar(value=bool(self.app_settings.get("ai_comment_enabled", True)))
         ctk.CTkCheckBox(ai_frame, text="Bật ChatGPT thủ công tự nghĩ comment theo bài viết", variable=self.ai_comment_enabled_var).pack(anchor="w", padx=18, pady=4)
+        ctk.CTkLabel(ai_frame, text="Thư mục profile Chrome riêng cho ChatGPT", anchor="w").pack(fill="x", padx=18, pady=(8, 2))
+        self.chatgpt_profile_entry = ctk.CTkEntry(ai_frame)
+        self.chatgpt_profile_entry.pack(fill="x", padx=18, pady=(0, 8))
+        self.chatgpt_profile_entry.insert(0, self.app_settings.get("chatgpt_profile_dir", DEFAULT_CHATGPT_PROFILE_DIR))
         ctk.CTkButton(ai_frame, text="Lưu cài đặt ChatGPT", width=180, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(8, 16))
 
         io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
@@ -1698,16 +1705,20 @@ class FacebookCareTool(ctk.CTk):
         enabled = bool(self.app_settings.get("ai_comment_enabled", True))
         if hasattr(self, "ai_comment_enabled_var"):
             enabled = bool(self.ai_comment_enabled_var.get())
-        return {"enabled": enabled}
+        profile_dir = str(self.app_settings.get("chatgpt_profile_dir") or DEFAULT_CHATGPT_PROFILE_DIR).strip()
+        if hasattr(self, "chatgpt_profile_entry"):
+            profile_dir = self.chatgpt_profile_entry.get().strip() or DEFAULT_CHATGPT_PROFILE_DIR
+        return {"enabled": enabled, "profile_dir": profile_dir}
 
     def build_comment_from_scanned_content(self, page, scanned_post_text, fallback_content, acc_name, ai_comment_settings, target_comment_text=""):
         if not ai_comment_settings.get("enabled"):
             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."))
             return None
 
-        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧠 Mở ChatGPT thủ công bằng cookie trình duyệt, paste prompt + dữ liệu bài đã quét..."))
+        profile_dir = ai_comment_settings.get("profile_dir") or DEFAULT_CHATGPT_PROFILE_DIR
+        self.after(0, lambda n=acc_name, d=profile_dir: self.append_live_log(f"[{n}] 🧠 Gửi request sang Chrome ChatGPT riêng ({d}), paste prompt + dữ liệu bài đã quét..."))
         try:
-            chat_comment = self.generate_comment_with_manual_chatgpt(page, scanned_post_text, acc_name, target_comment_text)
+            chat_comment = self.generate_comment_with_manual_chatgpt(scanned_post_text, acc_name, target_comment_text, profile_dir)
         except Exception as exc:
             self.after(0, lambda n=acc_name, err=str(exc): self.append_live_log(f"[{n}] ❌ ChatGPT thủ công lỗi: {err[:160]}"))
             return None
@@ -1721,135 +1732,155 @@ class FacebookCareTool(ctk.CTk):
         self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ ChatGPT chưa tạo được comment hợp lệ, bỏ qua bài."))
         return None
 
-    def generate_comment_with_manual_chatgpt(self, facebook_page, scanned_post_text, acc_name, target_comment_text=""):
+    def generate_comment_with_manual_chatgpt(self, scanned_post_text, acc_name, target_comment_text="", chatgpt_profile_dir=DEFAULT_CHATGPT_PROFILE_DIR):
         prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
         chatgpt_cookie_path = "chatgpt_cookies.json"
+        valid_cookies = []
         if os.path.exists(chatgpt_cookie_path):
             try:
                 with open(chatgpt_cookie_path, "r", encoding="utf-8") as f:
                     raw_data = json.load(f)
-                    
-                    # 1. Bóc tách danh sách cookie tùy theo định dạng file JSON
-                    if isinstance(raw_data, dict) and "cookies" in raw_data:
-                        cookie_list = raw_data["cookies"] # Xử lý format {"url": "...", "cookies": [...]}
-                    elif isinstance(raw_data, list):
-                        cookie_list = raw_data          # Xử lý format [...]
-                    else:
-                        cookie_list = []
 
-                    # 2. Lọc và chuẩn hóa cookie để tránh lỗi Playwright
-                    valid_cookies = []
-                    for c in cookie_list:
-                        # Bỏ qua các trường như sameSite, hostOnly... vì Playwright rất dễ báo lỗi mismatch type
-                        valid_cookie = {
-                            "name": c.get("name"),
-                            "value": c.get("value"),
-                            "domain": c.get("domain", ".chatgpt.com"),
-                            "path": c.get("path", "/")
-                        }
-                        valid_cookies.append(valid_cookie)
-                        
-                    if valid_cookies:
-                        facebook_page.context.add_cookies(valid_cookies)
-                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🍪 Đã nạp thành công {len(valid_cookies)} cookie ChatGPT!"))
-                    else:
-                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ File cookie không có dữ liệu hợp lệ!"))
-            except Exception as e:
-                self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ⚠️ Lỗi nạp cookie ChatGPT: {err}"))
-        else:
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không tìm thấy file {chatgpt_cookie_path}, sẽ dùng phiên ẩn danh/hiện tại."))
-        # ------------------------------------------------
-
-        
-        chat_page = facebook_page.context.new_page()
-        try:
-            chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
-            try:
-                chat_page.wait_for_load_state("networkidle", timeout=25000)
-            except Exception:
-                pass
-            if not self.interruptible_sleep(3):
-                return None
-
-            composer_selectors = [
-                "#prompt-textarea",
-                "div[contenteditable='true'][id='prompt-textarea']",
-                "textarea[data-testid='prompt-textarea']",
-                "textarea[placeholder*='Message' i]",
-                "textarea[placeholder*='Nhắn' i]",
-                "div[contenteditable='true']",
-            ]
-            composer = None
-            for selector in composer_selectors:
-                try:
-                    candidate = chat_page.locator(selector).last
-                    if candidate.is_visible(timeout=3000):
-                        composer = candidate
-                        break
-                except Exception:
-                    continue
-            if composer is None:
-                raise RuntimeError("Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong browser/cookie profile rồi chạy lại.")
-
-            self.attach_images_to_chatgpt(chat_page, self.scanned_post_image_paths, acc_name)
-
-            assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
-            try:
-                before_count = chat_page.locator(assistant_selector).count()
-            except Exception:
-                before_count = 0
-
-            composer.click(timeout=10000)
-            chat_page.keyboard.press("Control+A")
-            chat_page.keyboard.insert_text(prompt)
-            if not self.interruptible_sleep(random.uniform(0.5, 1.2)):
-                return None
-
-            send_selectors = "[data-testid='send-button'], button[aria-label*='Send' i], button[aria-label*='Gửi' i]"
-            try:
-                send_button = chat_page.locator(send_selectors).last
-                if send_button.is_visible(timeout=2500):
-                    send_button.click(timeout=10000)
+                if isinstance(raw_data, dict) and "cookies" in raw_data:
+                    cookie_list = raw_data["cookies"]
+                elif isinstance(raw_data, list):
+                    cookie_list = raw_data
                 else:
-                    chat_page.keyboard.press("Enter")
-            except Exception:
-                chat_page.keyboard.press("Enter")
+                    cookie_list = []
 
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
-            try:
-                chat_page.wait_for_function(
-                    "([selector, count]) => document.querySelectorAll(selector).length > count",
-                    [assistant_selector, before_count],
-                    timeout=180000,
-                )
-            except Exception:
-                pass
-            try:
-                chat_page.wait_for_function(
-                    "() => !document.querySelector('[data-testid=\"stop-button\"], button[aria-label*=\"Stop\" i], button[aria-label*=\"Dừng\" i]')",
-                    timeout=180000,
-                )
-            except Exception:
-                pass
-            if not self.interruptible_sleep(1.5):
-                return None
+                for c in cookie_list:
+                    name = c.get("name")
+                    value = c.get("value")
+                    if not name or value is None:
+                        continue
+                    valid_cookies.append({
+                        "name": name,
+                        "value": value,
+                        "domain": c.get("domain", ".chatgpt.com"),
+                        "path": c.get("path", "/"),
+                    })
 
-            responses = chat_page.locator(assistant_selector).evaluate_all(
-                "nodes => nodes.map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)"
-            )
-            raw_comment = responses[-1] if responses else ""
-            is_valid, reason = validate_ai_comment(raw_comment, min_words=7)
-            if is_valid:
-                return raw_comment.strip().strip('\"“”')
-            if reason == "skip":
-                return "SKIP_COMMENT"
-            self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
-            return None
-        finally:
-            try:
-                chat_page.close()
-            except Exception:
-                pass
+                if valid_cookies:
+                    self.after(0, lambda n=acc_name, count=len(valid_cookies): self.append_live_log(f"[{n}] 🍪 Sẽ nạp {count} cookie ChatGPT vào Chrome riêng."))
+                else:
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ File cookie không có dữ liệu hợp lệ!"))
+            except Exception as e:
+                self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ⚠️ Lỗi đọc cookie ChatGPT: {err}"))
+        else:
+            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ℹ️ Không tìm thấy file {chatgpt_cookie_path}; dùng cookie đã lưu trong Chrome ChatGPT riêng."))
+
+        chatgpt_profile_dir = chatgpt_profile_dir or DEFAULT_CHATGPT_PROFILE_DIR
+        self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🔒 Chờ Chrome ChatGPT riêng nhận request: {d}"))
+        with self.chatgpt_browser_lock:
+            with sync_playwright() as chat_playwright:
+                chat_context = chat_playwright.chromium.launch_persistent_context(
+                    chatgpt_profile_dir,
+                    channel="chrome",
+                    headless=False,
+                    viewport={"width": 1280, "height": 900},
+                    locale="vi-VN",
+                    timezone_id="Asia/Ho_Chi_Minh",
+                    args=[
+                        "--disable-features=Translate",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled",
+                    ],
+                )
+                try:
+                    if valid_cookies:
+                        try:
+                            chat_context.add_cookies(valid_cookies)
+                        except Exception as err:
+                            self.after(0, lambda n=acc_name, e=str(err): self.append_live_log(f"[{n}] ⚠️ Không nạp được cookie vào Chrome ChatGPT riêng: {e[:120]}"))
+
+                    chat_page = chat_context.pages[0] if chat_context.pages else chat_context.new_page()
+                    chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
+                    try:
+                        chat_page.wait_for_load_state("networkidle", timeout=25000)
+                    except Exception:
+                        pass
+                    if not self.interruptible_sleep(3):
+                        return None
+
+                    composer_selectors = [
+                        "#prompt-textarea",
+                        "div[contenteditable='true'][id='prompt-textarea']",
+                        "textarea[data-testid='prompt-textarea']",
+                        "textarea[placeholder*='Message' i]",
+                        "textarea[placeholder*='Nhắn' i]",
+                        "div[contenteditable='true']",
+                    ]
+                    composer = None
+                    for selector in composer_selectors:
+                        try:
+                            candidate = chat_page.locator(selector).last
+                            if candidate.is_visible(timeout=3000):
+                                composer = candidate
+                                break
+                        except Exception:
+                            continue
+                    if composer is None:
+                        raise RuntimeError(f"Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong Chrome profile riêng '{chatgpt_profile_dir}' rồi chạy lại.")
+
+                    self.attach_images_to_chatgpt(chat_page, self.scanned_post_image_paths, acc_name)
+
+                    assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
+                    try:
+                        before_count = chat_page.locator(assistant_selector).count()
+                    except Exception:
+                        before_count = 0
+
+                    composer.click(timeout=10000)
+                    chat_page.keyboard.press("Control+A")
+                    chat_page.keyboard.insert_text(prompt)
+                    if not self.interruptible_sleep(random.uniform(0.5, 1.2)):
+                        return None
+
+                    send_selectors = "[data-testid='send-button'], button[aria-label*='Send' i], button[aria-label*='Gửi' i]"
+                    try:
+                        send_button = chat_page.locator(send_selectors).last
+                        if send_button.is_visible(timeout=2500):
+                            send_button.click(timeout=10000)
+                        else:
+                            chat_page.keyboard.press("Enter")
+                    except Exception:
+                        chat_page.keyboard.press("Enter")
+
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
+                    try:
+                        chat_page.wait_for_function(
+                            "([selector, count]) => document.querySelectorAll(selector).length > count",
+                            [assistant_selector, before_count],
+                            timeout=180000,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        chat_page.wait_for_function(
+                            "() => !document.querySelector('[data-testid=\"stop-button\"], button[aria-label*=\"Stop\" i], button[aria-label*=\"Dừng\" i]')",
+                            timeout=180000,
+                        )
+                    except Exception:
+                        pass
+                    if not self.interruptible_sleep(1.5):
+                        return None
+
+                    responses = chat_page.locator(assistant_selector).evaluate_all(
+                        "nodes => nodes.map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)"
+                    )
+                    raw_comment = responses[-1] if responses else ""
+                    is_valid, reason = validate_ai_comment(raw_comment, min_words=7)
+                    if is_valid:
+                        return raw_comment.strip().strip('\"“”')
+                    if reason == "skip":
+                        return "SKIP_COMMENT"
+                    self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
+                    return None
+                finally:
+                    try:
+                        chat_context.close()
+                    except Exception:
+                        pass
 
     def attach_images_to_chatgpt(self, chat_page, image_paths, acc_name):
         valid_paths = [path for path in (image_paths or []) if os.path.exists(path)]
@@ -2302,6 +2333,8 @@ class FacebookCareTool(ctk.CTk):
         if not hasattr(self, "ai_comment_enabled_var"):
             return
         self.app_settings["ai_comment_enabled"] = self.ai_comment_enabled_var.get()
+        if hasattr(self, "chatgpt_profile_entry"):
+            self.app_settings["chatgpt_profile_dir"] = self.chatgpt_profile_entry.get().strip() or DEFAULT_CHATGPT_PROFILE_DIR
         self.app_settings.pop("ai_comment_api_key", None)
         self.app_settings.pop("ai_comment_model", None)
         self.app_settings.pop("ai_comment_base_url", None)
