@@ -65,10 +65,10 @@ Trong màn hình **Thêm tài khoản hàng loạt**, có thể nhập proxy aut
 
 Trong tab **Comment**, nếu muốn tool tự nghĩ comment theo từng bài mà không gọi API ngoài:
 
-1. Đăng nhập `https://chatgpt.com` trong Chrome/profile riêng dành cho ChatGPT (mặc định thư mục `chatgpt_profile/`, có thể đổi ở **Cài đặt → ChatGPT thủ công tạo comment**).
+1. Vào **Cài đặt → ChatGPT thủ công tạo comment** rồi bấm **🌐 Mở Chrome ChatGPT để đăng nhập**. Đăng nhập `https://chatgpt.com` trong cửa sổ Chrome vừa mở; profile riêng mặc định là `chatgpt_profile/` và có thể đổi ngay trong phần cài đặt này.
 2. Vào **Cài đặt → ChatGPT thủ công tạo comment**, bật **Bật ChatGPT thủ công tự nghĩ comment theo bài viết**.
 3. Ở màn **Comment**, bật **Quét bài rồi tự nghĩ comment phù hợp** và nên để trống ô **Nội dung Comment / Fallback**.
-4. Khi campaign chạy, các Chrome/account Facebook chỉ quét nội dung bài + comment cần trả lời rồi gửi request sang Chrome ChatGPT riêng. Tool paste prompt vào `chatgpt.com`, chờ ChatGPT trả đúng 1 reply rồi dán reply đó vào ô phản hồi trên Facebook. Các request ChatGPT được xếp hàng tuần tự để không đè lên cùng một cửa sổ ChatGPT.
+4. Khi campaign chạy, các Chrome/account Facebook chỉ quét nội dung bài + comment cần trả lời rồi gửi request sang Chrome ChatGPT riêng mà bạn đã tự đăng nhập. Tool paste prompt vào `chatgpt.com`, chờ ChatGPT trả đúng 1 reply rồi dán reply đó vào ô phản hồi trên Facebook. Các request ChatGPT được xếp hàng tuần tự để không đè lên cùng một cửa sổ ChatGPT.
 
 ## CLI tự động tạo bình luận Facebook bằng ChatGPT thủ công
 
@@ -83,8 +83,11 @@ npm install
 Chuẩn bị đăng nhập:
 
 ```bash
+# Mở Chrome ChatGPT riêng để bạn tự đăng nhập một lần.
+node index.js --login-chatgpt
+
 # Chạy một lần để mở profile Facebook và kiểm tra luồng.
-# Đăng nhập Facebook trong profile `fb_comment_profile/` và đăng nhập ChatGPT trong profile riêng `chatgpt_profile/`.
+# Đăng nhập Facebook trong profile `fb_comment_profile/` nếu profile này chưa đăng nhập.
 node index.js "https://www.facebook.com/..."
 ```
 
@@ -103,8 +106,8 @@ node index.js "https://www.facebook.com/..." --post
 Ghi chú vận hành:
 
 - Chrome Facebook dùng profile cố định `fb_comment_profile/` (hoặc đặt `FB_PROFILE_DIR=/duong/dan/profile`) để giữ trạng thái đăng nhập Facebook.
-- Chrome ChatGPT dùng profile riêng `chatgpt_profile/` (hoặc đặt `CHATGPT_PROFILE_DIR=/duong/dan/chatgpt-profile`) để giữ trạng thái đăng nhập ChatGPT và nhận request từ các Chrome Facebook.
-- Nếu profile chưa đăng nhập Facebook hoặc Chrome ChatGPT riêng chưa đăng nhập ChatGPT, tool sẽ dừng và báo đăng nhập trước.
+- Chrome ChatGPT dùng profile riêng `chatgpt_profile/` (hoặc đặt `CHATGPT_PROFILE_DIR=/duong/dan/chatgpt-profile`) để bạn tự đăng nhập ChatGPT một lần, giữ trạng thái đăng nhập và nhận request từ các Chrome Facebook. Luồng này không cần nhập/export cookie ChatGPT.
+- Nếu profile chưa đăng nhập Facebook hoặc Chrome ChatGPT riêng chưa đăng nhập ChatGPT, tool sẽ dừng và báo đăng nhập trước; hãy chạy `node index.js --login-chatgpt` hoặc bấm nút mở Chrome ChatGPT trong app desktop để đăng nhập.
 - Tool chụp ảnh/thumbnail có kích thước phù hợp để đính kèm vào ChatGPT; nếu không lấy được chữ trong ảnh thì prompt/log ghi rõ chưa OCR. Có thể tắt bước chụp/gửi ảnh bằng `FB_COMMENT_ENABLE_VISION=0`.
 - Không có flag `--post` thì tool chỉ in reply ở chế độ preview, không dán và không tự bấm đăng.
 - Luồng tự tạo hiện chạy theo thứ tự: quét nội dung/ảnh bài viết → quét comment cần trả lời → nhờ ChatGPT tạo reply liên quan cả bài viết và comment → đăng vào ô phản hồi của comment.

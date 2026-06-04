@@ -5,10 +5,10 @@ const { chromium } = require('playwright');
 const { buildCommentPrompt, buildReplyPrompt, validateGeneratedComment } = require('./aiCommenter');
 
 const POST_FLAG = '--post';
+const LOGIN_CHATGPT_FLAG = '--login-chatgpt';
 const DEFAULT_PROFILE_DIR = path.resolve(process.env.FB_PROFILE_DIR || 'fb_comment_profile');
 const CHATGPT_PROFILE_DIR = path.resolve(process.env.CHATGPT_PROFILE_DIR || 'chatgpt_profile');
 const ENABLE_VISION = process.env.FB_COMMENT_ENABLE_VISION !== '0';
-const CHATGPT_COOKIES_FILE = path.resolve(process.env.CHATGPT_COOKIES_FILE || 'chatgpt_cookies.json');
 const PLAYWRIGHT_SLOW_MO = Number.isFinite(Number(process.env.FB_COMMENT_SLOW_MO))
   ? Math.max(0, Number(process.env.FB_COMMENT_SLOW_MO))
   : 0;
@@ -18,7 +18,7 @@ function log(message) {
 }
 
 function usage() {
-  console.log(`Cách dùng:\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API. Tool mở https://chatgpt.com/?temporary-chat=true bằng Chrome/profile riêng chỉ dành cho ChatGPT; các Chrome Facebook gửi request sang profile này.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile      # profile Chrome cho Facebook\n  CHATGPT_PROFILE_DIR=./chatgpt_profile    # profile Chrome riêng chỉ để đăng nhập ChatGPT\n  FB_COMMENT_ENABLE_VISION=0   # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT\n  FB_COMMENT_SLOW_MO=0         # tốc độ Playwright (ms), mặc định 0 để chạy mượt\n  CHATGPT_COOKIES_FILE=./chatgpt_cookies.json # file cookie export để auto-convert rồi nạp vào Playwright`);
+  console.log(`Cách dùng:\n  node index.js --login-chatgpt                  # mở Chrome ChatGPT để bạn tự đăng nhập\n  node index.js "https://www.facebook.com/..."        # preview, không đăng\n  node index.js "https://www.facebook.com/..." --post # tự đăng comment\n\nLuồng mới không gọi OpenAI/Gemini API và không yêu cầu nhập cookie ChatGPT. Tool mở https://chatgpt.com/?temporary-chat=true bằng Chrome/profile riêng chỉ dành cho ChatGPT; bạn tự đăng nhập một lần trong profile này, các Chrome Facebook gửi request sang profile đó.\n\nTuỳ chọn:\n  FB_PROFILE_DIR=./fb_comment_profile      # profile Chrome cho Facebook\n  CHATGPT_PROFILE_DIR=./chatgpt_profile    # profile Chrome riêng chỉ để bạn tự đăng nhập ChatGPT\n  FB_COMMENT_ENABLE_VISION=0   # tắt chụp ảnh/thumbnail để gửi kèm ChatGPT\n  FB_COMMENT_SLOW_MO=0         # tốc độ Playwright (ms), mặc định 0 để chạy mượt`);
 }
 
 async function optimizePagePerformance(page, { keepImages }) {
@@ -31,104 +31,14 @@ async function optimizePagePerformance(page, { keepImages }) {
   });
 }
 
-function normalizeSameSite(value) {
-  const raw = String(value || '').toLowerCase().trim();
-  if (raw === 'lax') return 'Lax';
-  if (raw === 'strict') return 'Strict';
-  if (raw === 'none' || raw === 'no_restriction' || raw === 'unspecified') return 'None';
-  return undefined;
-}
-
-function normalizeDomain(input) {
-  const raw = String(input || '').trim();
-  if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      return new URL(raw).hostname;
-    } catch {
-      return '';
-    }
-  }
-  return raw.replace(/^\./, '');
-}
-
-function convertBrowserCookie(rawCookie) {
-  if (!rawCookie || typeof rawCookie !== 'object') return null;
-  const name = String(rawCookie.name || '').trim();
-  const value = String(rawCookie.value || '');
-  const domain = normalizeDomain(rawCookie.domain || rawCookie.host || rawCookie.hostOnly);
-  if (!name || !value || !domain) return null;
-
-  const secure = Boolean(rawCookie.secure);
-  const normalized = {
-    name,
-    value,
-    domain,
-    path: String(rawCookie.path || '/').trim() || '/',
-    httpOnly: Boolean(rawCookie.httpOnly),
-    secure,
-  };
-
-  const expiresRaw = rawCookie.expires ?? rawCookie.expirationDate;
-  if (typeof expiresRaw === 'number' && Number.isFinite(expiresRaw) && expiresRaw > 0) {
-    normalized.expires = Math.floor(expiresRaw);
-  }
-
-  const sameSite = normalizeSameSite(rawCookie.sameSite);
-  if (sameSite && !(sameSite === 'None' && !secure)) {
-    normalized.sameSite = sameSite;
-  }
-
-  return normalized;
-}
-
-async function applyChatGPTCookies(context) {
-  try {
-    const rawText = await fs.readFile(CHATGPT_COOKIES_FILE, 'utf8');
-    const parsed = JSON.parse(rawText);
-    if (!Array.isArray(parsed) || !parsed.length) {
-      log(`⚠️ File cookie ChatGPT rỗng/không hợp lệ: ${CHATGPT_COOKIES_FILE}`);
-      return;
-    }
-
-    const converted = parsed
-      .map(convertBrowserCookie)
-      .filter(Boolean);
-
-    if (!converted.length) {
-      log(`⚠️ Không convert được cookie nào từ ${CHATGPT_COOKIES_FILE}`);
-      return;
-    }
-
-    const accepted = [];
-    for (const cookie of converted) {
-      try {
-        await context.addCookies([cookie]);
-        accepted.push(cookie);
-      } catch {
-        // bỏ qua cookie không hợp lệ để tránh fail toàn bộ lô
-      }
-    }
-
-    if (!accepted.length) {
-      log(`⚠️ Không có cookie ChatGPT hợp lệ sau khi lọc: ${CHATGPT_COOKIES_FILE}`);
-      return;
-    }
-
-    log(`🍪 Đã nạp ${accepted.length}/${parsed.length} cookie ChatGPT (lọc lỗi theo từng cookie).`);
-  } catch (error) {
-    if (error && error.code === 'ENOENT') {
-      log(`ℹ️ Không tìm thấy file cookie ChatGPT (${CHATGPT_COOKIES_FILE}), tiếp tục dùng cookie trong Chromium profile.`);
-      return;
-    }
-    log(`⚠️ Lỗi nạp cookie ChatGPT: ${error.message}`);
-  }
-}
-
 function parseArgs(argv) {
   const args = argv.slice(2);
   const shouldPost = args.includes(POST_FLAG);
+  const shouldOpenChatGPTLogin = args.includes(LOGIN_CHATGPT_FLAG);
   const url = args.find((arg) => !arg.startsWith('--'));
+  if (shouldOpenChatGPTLogin) {
+    return { shouldOpenChatGPTLogin, url: '', shouldPost: false };
+  }
   if (!url) {
     usage();
     process.exitCode = 1;
@@ -137,7 +47,7 @@ function parseArgs(argv) {
   if (!/^https?:\/\/(www\.|m\.|mbasic\.)?facebook\.com\//i.test(url)) {
     throw new Error('URL không hợp lệ. Tool chỉ nhận link bắt đầu bằng https://www.facebook.com/...');
   }
-  return { url, shouldPost };
+  return { shouldOpenChatGPTLogin: false, url, shouldPost };
 }
 
 async function humanDelay(min = 350, max = 1200) {
@@ -920,8 +830,23 @@ async function openChatGPTContext() {
       '--disable-dev-shm-usage',
     ],
   });
-  await applyChatGPTCookies(context);
   return context;
+}
+
+async function openChatGPTLoginBrowser() {
+  const context = await openChatGPTContext();
+  try {
+    const page = context.pages()[0] || await context.newPage();
+    log(`🌐 Đã mở Chrome ChatGPT để bạn tự đăng nhập: ${CHATGPT_PROFILE_DIR}`);
+    await page.goto('https://chatgpt.com/', { waitUntil: 'domcontentloaded', timeout: 90000 });
+    log('Hãy đăng nhập trong cửa sổ Chrome vừa mở. Sau khi thấy ô chat ChatGPT, đóng cửa sổ Chrome để kết thúc.');
+    while (context.pages().length) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    log(`✅ Đã đóng Chrome ChatGPT. Phiên đăng nhập được lưu trong profile: ${CHATGPT_PROFILE_DIR}`);
+  } finally {
+    await context.close().catch(() => null);
+  }
 }
 
 async function generateCommentWithChatGPT(postData, targetComment = '') {
@@ -961,7 +886,12 @@ async function main() {
   const parsed = parseArgs(process.argv);
   if (!parsed) return;
 
-  const { url, shouldPost } = parsed;
+  const { url, shouldPost, shouldOpenChatGPTLogin } = parsed;
+  if (shouldOpenChatGPTLogin) {
+    await openChatGPTLoginBrowser();
+    return;
+  }
+
   log(`Chế độ: ${shouldPost ? 'Auto-post' : 'Preview'}`);
   log(`Dùng Chrome Facebook profile: ${DEFAULT_PROFILE_DIR}`);
   log(`Dùng Chrome ChatGPT profile riêng: ${CHATGPT_PROFILE_DIR}`);

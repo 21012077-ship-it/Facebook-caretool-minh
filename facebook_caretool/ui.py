@@ -31,7 +31,6 @@ from .utils import (
     save_json,
     spin_content,
 )
-import json
 import os
 import threading
 import time
@@ -576,7 +575,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(
             right_panel,
 
-            text="Khi bật: tool đọc nội dung bài post chính, mở chatgpt.com bằng cookie trình duyệt, paste prompt để lấy comment mới bám ý cụ thể. Nếu ChatGPT chưa đăng nhập hoặc trả comment không hợp lệ thì bỏ qua link; không tự bịa fallback.",
+            text="Khi bật: tool đọc nội dung bài post chính, mở chatgpt.com trong Chrome/profile ChatGPT riêng mà bạn đã tự đăng nhập, paste prompt để lấy comment mới bám ý cụ thể. Nếu ChatGPT chưa đăng nhập hoặc trả comment không hợp lệ thì bỏ qua link; không tự bịa fallback.",
             text_color="#a7f3d0",
             wraplength=280,
             justify="left",
@@ -733,7 +732,7 @@ class FacebookCareTool(ctk.CTk):
         ctk.CTkLabel(ai_frame, text="ChatGPT thủ công tạo comment", font=("Arial", 18, "bold"), anchor="w").pack(fill="x", padx=18, pady=(16, 8))
         ctk.CTkLabel(
             ai_frame,
-            text="Không gọi API OpenAI/Gemini. Tool sẽ mở một Chrome/profile RIÊNG chỉ dành cho https://chatgpt.com; các Chrome Facebook/tab account sẽ gửi prompt sang Chrome ChatGPT này rồi lấy comment trả về.",
+            text="Không gọi API OpenAI/Gemini và không cần nhập cookie ChatGPT. Bạn bấm nút mở Chrome ChatGPT, tự đăng nhập một lần; tool sẽ dùng đúng Chrome/profile RIÊNG đó để gửi prompt và lấy comment trả về.",
             text_color="#a7f3d0",
             wraplength=850,
             justify="left",
@@ -744,7 +743,10 @@ class FacebookCareTool(ctk.CTk):
         self.chatgpt_profile_entry = ctk.CTkEntry(ai_frame)
         self.chatgpt_profile_entry.pack(fill="x", padx=18, pady=(0, 8))
         self.chatgpt_profile_entry.insert(0, self.app_settings.get("chatgpt_profile_dir", DEFAULT_CHATGPT_PROFILE_DIR))
-        ctk.CTkButton(ai_frame, text="Lưu cài đặt ChatGPT", width=180, fg_color="#16a34a", command=self.save_app_settings).pack(anchor="w", padx=18, pady=(8, 16))
+        action_row = ctk.CTkFrame(ai_frame, fg_color="transparent")
+        action_row.pack(fill="x", padx=18, pady=(8, 16))
+        ctk.CTkButton(action_row, text="🌐 Mở Chrome ChatGPT để đăng nhập", width=260, fg_color="#2563eb", command=self.open_chatgpt_login_browser).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(action_row, text="Lưu cài đặt ChatGPT", width=180, fg_color="#16a34a", command=self.save_app_settings).pack(side="left")
 
         io_frame = ctk.CTkFrame(body, fg_color="#111827", corner_radius=15)
         io_frame.grid(row=2, column=0, sticky="ew", pady=12)
@@ -1734,42 +1736,8 @@ class FacebookCareTool(ctk.CTk):
 
     def generate_comment_with_manual_chatgpt(self, scanned_post_text, acc_name, target_comment_text="", chatgpt_profile_dir=DEFAULT_CHATGPT_PROFILE_DIR):
         prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
-        chatgpt_cookie_path = "chatgpt_cookies.json"
-        valid_cookies = []
-        if os.path.exists(chatgpt_cookie_path):
-            try:
-                with open(chatgpt_cookie_path, "r", encoding="utf-8") as f:
-                    raw_data = json.load(f)
-
-                if isinstance(raw_data, dict) and "cookies" in raw_data:
-                    cookie_list = raw_data["cookies"]
-                elif isinstance(raw_data, list):
-                    cookie_list = raw_data
-                else:
-                    cookie_list = []
-
-                for c in cookie_list:
-                    name = c.get("name")
-                    value = c.get("value")
-                    if not name or value is None:
-                        continue
-                    valid_cookies.append({
-                        "name": name,
-                        "value": value,
-                        "domain": c.get("domain", ".chatgpt.com"),
-                        "path": c.get("path", "/"),
-                    })
-
-                if valid_cookies:
-                    self.after(0, lambda n=acc_name, count=len(valid_cookies): self.append_live_log(f"[{n}] 🍪 Sẽ nạp {count} cookie ChatGPT vào Chrome riêng."))
-                else:
-                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ File cookie không có dữ liệu hợp lệ!"))
-            except Exception as e:
-                self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ⚠️ Lỗi đọc cookie ChatGPT: {err}"))
-        else:
-            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ℹ️ Không tìm thấy file {chatgpt_cookie_path}; dùng cookie đã lưu trong Chrome ChatGPT riêng."))
-
         chatgpt_profile_dir = chatgpt_profile_dir or DEFAULT_CHATGPT_PROFILE_DIR
+        self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🔐 Dùng phiên đăng nhập ChatGPT đã lưu trong Chrome/profile riêng '{d}' (không nạp cookie thủ công)."))
         self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🔒 Chờ Chrome ChatGPT riêng nhận request: {d}"))
         with self.chatgpt_browser_lock:
             with sync_playwright() as chat_playwright:
@@ -1787,12 +1755,6 @@ class FacebookCareTool(ctk.CTk):
                     ],
                 )
                 try:
-                    if valid_cookies:
-                        try:
-                            chat_context.add_cookies(valid_cookies)
-                        except Exception as err:
-                            self.after(0, lambda n=acc_name, e=str(err): self.append_live_log(f"[{n}] ⚠️ Không nạp được cookie vào Chrome ChatGPT riêng: {e[:120]}"))
-
                     chat_page = chat_context.pages[0] if chat_context.pages else chat_context.new_page()
                     chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
                     try:
@@ -1930,7 +1892,7 @@ class FacebookCareTool(ctk.CTk):
             comment_payloads = [{"text": "", "media_path": comment_image_paths[0] if comment_image_paths else ""}]
 
             if ai_comment_settings.get("enabled"):
-                log_message = "🤖 Đang chạy chế độ ChatGPT thủ công: mỗi bài sẽ quét nội dung bài + comment cần trả lời, paste vào chatgpt.com bằng cookie trình duyệt rồi lấy reply trả về."
+                log_message = "🤖 Đang chạy chế độ ChatGPT thủ công: mỗi bài sẽ quét nội dung bài + comment cần trả lời, paste vào chatgpt.com trong Chrome/profile ChatGPT riêng bạn đã tự đăng nhập rồi lấy reply trả về."
             else:
                 log_message = "❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."
 
@@ -2427,9 +2389,58 @@ class FacebookCareTool(ctk.CTk):
             self.import_overwrite_var.set(bool(self.app_settings.get("import_overwrite_default", False)))
         if hasattr(self, "ai_comment_enabled_var"):
             self.ai_comment_enabled_var.set(bool(self.app_settings.get("ai_comment_enabled", True)))
+        if hasattr(self, "chatgpt_profile_entry"):
+            self.chatgpt_profile_entry.delete(0, "end")
+            self.chatgpt_profile_entry.insert(0, self.app_settings.get("chatgpt_profile_dir", DEFAULT_CHATGPT_PROFILE_DIR))
         if hasattr(self, "browser_url_entry"):
             self.browser_url_entry.delete(0, "end")
             self.browser_url_entry.insert(0, self.app_settings.get("default_home_url", "https://www.facebook.com/"))
+
+
+    def open_chatgpt_login_browser(self):
+        """Mở Chrome/profile ChatGPT để người dùng tự đăng nhập và lưu phiên."""
+        self.save_app_settings_without_popup()
+        profile_dir = self.get_ai_comment_settings().get("profile_dir") or DEFAULT_CHATGPT_PROFILE_DIR
+
+        def worker():
+            try:
+                self.after(0, lambda d=profile_dir: self.append_live_log(f"[ChatGPT] 🌐 Đang mở Chrome ChatGPT để bạn tự đăng nhập: {d}"))
+                with self.chatgpt_browser_lock:
+                    with sync_playwright() as playwright:
+                        context = playwright.chromium.launch_persistent_context(
+                            profile_dir,
+                            channel="chrome",
+                            headless=False,
+                            viewport={"width": 1280, "height": 900},
+                            locale="vi-VN",
+                            timezone_id="Asia/Ho_Chi_Minh",
+                            args=[
+                                "--disable-features=Translate",
+                                "--disable-dev-shm-usage",
+                                "--disable-blink-features=AutomationControlled",
+                            ],
+                        )
+                        try:
+                            page = context.pages[0] if context.pages else context.new_page()
+                            page.goto("https://chatgpt.com/", wait_until="domcontentloaded", timeout=90000)
+                            self.after(0, lambda d=profile_dir: messagebox.showinfo(
+                                "Đăng nhập ChatGPT",
+                                f"Chrome ChatGPT đã mở. Hãy đăng nhập trong cửa sổ đó.\n\n"
+                                f"Sau khi thấy ô chat ChatGPT, bạn có thể đóng cửa sổ Chrome. Phiên đăng nhập sẽ được lưu trong profile:\n{d}",
+                            ))
+                            while context.pages:
+                                time.sleep(1)
+                        finally:
+                            try:
+                                context.close()
+                            except Exception:
+                                pass
+                self.after(0, lambda d=profile_dir: self.append_live_log(f"[ChatGPT] ✅ Đã đóng Chrome ChatGPT. Phiên đăng nhập đã được lưu trong profile: {d}"))
+            except Exception as exc:
+                self.after(0, lambda e=str(exc): messagebox.showerror("Không mở được ChatGPT", e))
+                self.after(0, lambda e=str(exc): self.append_live_log(f"[ChatGPT] ❌ Không mở được Chrome ChatGPT: {e[:160]}"))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def export_accounts_safe(self):
         include_sensitive = self.export_sensitive_var.get()
