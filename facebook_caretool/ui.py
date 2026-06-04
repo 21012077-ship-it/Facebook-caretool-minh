@@ -1763,119 +1763,132 @@ class FacebookCareTool(ctk.CTk):
         if not self.acquire_chatgpt_browser_lock(acc_name, chatgpt_profile_dir):
             return None
         try:
-            with sync_playwright() as chat_playwright:
-                self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🌐 Đang mở Chrome ChatGPT bằng profile: {d}"))
-                chat_context = chat_playwright.chromium.launch_persistent_context(
+            # Luồng comment Facebook cũng đang dùng Playwright Sync API. Nếu mở thêm
+            # ChatGPT trong cùng worker đó, Playwright sẽ báo đang chạy trong asyncio
+            # loop. Tách riêng một thread cho phiên ChatGPT để tránh lồng sync API.
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix="chatgpt-playwright") as executor:
+                future = executor.submit(
+                    self._generate_comment_with_manual_chatgpt_locked,
+                    prompt,
+                    acc_name,
                     chatgpt_profile_dir,
-                    channel="chrome",
-                    headless=False,
-                    viewport={"width": 1280, "height": 900},
-                    locale="vi-VN",
-                    timezone_id="Asia/Ho_Chi_Minh",
-                    args=[
-                        "--disable-features=Translate",
-                        "--disable-dev-shm-usage",
-                        "--disable-blink-features=AutomationControlled",
-                    ],
                 )
-                try:
-                    chat_page = chat_context.pages[0] if chat_context.pages else chat_context.new_page()
-                    chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
-                    try:
-                        chat_page.wait_for_load_state("networkidle", timeout=25000)
-                    except Exception:
-                        pass
-                    if not self.interruptible_sleep(3):
-                        return None
-
-                    composer_selectors = [
-                        "#prompt-textarea",
-                        "div[contenteditable='true'][id='prompt-textarea']",
-                        "textarea[data-testid='prompt-textarea']",
-                        "textarea[placeholder*='Message' i]",
-                        "textarea[placeholder*='Nhắn' i]",
-                        "div[contenteditable='true']",
-                    ]
-                    composer = None
-                    for selector in composer_selectors:
-                        try:
-                            candidate = chat_page.locator(selector).last
-                            if candidate.is_visible(timeout=3000):
-                                composer = candidate
-                                break
-                        except Exception:
-                            continue
-                    if composer is None:
-                        raise RuntimeError(f"Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong Chrome profile riêng '{chatgpt_profile_dir}' rồi chạy lại.")
-
-                    self.attach_images_to_chatgpt(chat_page, self.scanned_post_image_paths, acc_name)
-
-                    assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
-                    try:
-                        before_count = chat_page.locator(assistant_selector).count()
-                    except Exception:
-                        before_count = 0
-
-                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 📋 Đã thấy ô nhập ChatGPT, đang paste prompt + dữ liệu bài/comment đã quét..."))
-                    composer.click(timeout=10000)
-                    chat_page.keyboard.press("Control+A")
-                    chat_page.keyboard.insert_text(prompt)
-                    if not self.interruptible_sleep(random.uniform(0.5, 1.2)):
-                        return None
-
-                    send_selectors = "[data-testid='send-button'], button[aria-label*='Send' i], button[aria-label*='Gửi' i]"
-                    try:
-                        send_button = chat_page.locator(send_selectors).last
-                        if send_button.is_visible(timeout=2500):
-                            send_button.click(timeout=10000)
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã bấm nút gửi prompt sang ChatGPT."))
-                        else:
-                            chat_page.keyboard.press("Enter")
-                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
-                    except Exception:
-                        chat_page.keyboard.press("Enter")
-                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
-
-                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
-                    try:
-                        chat_page.wait_for_function(
-                            "([selector, count]) => document.querySelectorAll(selector).length > count",
-                            [assistant_selector, before_count],
-                            timeout=180000,
-                        )
-                    except Exception:
-                        pass
-                    try:
-                        chat_page.wait_for_function(
-                            "() => !document.querySelector('[data-testid=\"stop-button\"], button[aria-label*=\"Stop\" i], button[aria-label*=\"Dừng\" i]')",
-                            timeout=180000,
-                        )
-                    except Exception:
-                        pass
-                    if not self.interruptible_sleep(1.5):
-                        return None
-
-                    responses = chat_page.locator(assistant_selector).evaluate_all(
-                        "nodes => nodes.map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)"
-                    )
-                    raw_comment = responses[-1] if responses else ""
-                    is_valid, reason = validate_ai_comment(raw_comment, min_words=7)
-                    if is_valid:
-                        return raw_comment.strip().strip('\"“”')
-                    if reason == "skip":
-                        return "SKIP_COMMENT"
-                    self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
-                    return None
-                finally:
-                    try:
-                        chat_context.close()
-                    except Exception:
-                        pass
+                return future.result()
         finally:
             try:
                 self.chatgpt_browser_lock.release()
             except RuntimeError:
                 pass
+
+    def _generate_comment_with_manual_chatgpt_locked(self, prompt, acc_name, chatgpt_profile_dir):
+        with sync_playwright() as chat_playwright:
+            self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🌐 Đang mở Chrome ChatGPT bằng profile: {d}"))
+            chat_context = chat_playwright.chromium.launch_persistent_context(
+                chatgpt_profile_dir,
+                channel="chrome",
+                headless=False,
+                viewport={"width": 1280, "height": 900},
+                locale="vi-VN",
+                timezone_id="Asia/Ho_Chi_Minh",
+                args=[
+                    "--disable-features=Translate",
+                    "--disable-dev-shm-usage",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+            )
+            try:
+                chat_page = chat_context.pages[0] if chat_context.pages else chat_context.new_page()
+                chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
+                try:
+                    chat_page.wait_for_load_state("networkidle", timeout=25000)
+                except Exception:
+                    pass
+                if not self.interruptible_sleep(3):
+                    return None
+
+                composer_selectors = [
+                    "#prompt-textarea",
+                    "div[contenteditable='true'][id='prompt-textarea']",
+                    "textarea[data-testid='prompt-textarea']",
+                    "textarea[placeholder*='Message' i]",
+                    "textarea[placeholder*='Nhắn' i]",
+                    "div[contenteditable='true']",
+                ]
+                composer = None
+                for selector in composer_selectors:
+                    try:
+                        candidate = chat_page.locator(selector).last
+                        if candidate.is_visible(timeout=3000):
+                            composer = candidate
+                            break
+                    except Exception:
+                        continue
+                if composer is None:
+                    raise RuntimeError(f"Không tìm thấy ô nhập ChatGPT. Hãy đăng nhập https://chatgpt.com trong Chrome profile riêng '{chatgpt_profile_dir}' rồi chạy lại.")
+
+                self.attach_images_to_chatgpt(chat_page, self.scanned_post_image_paths, acc_name)
+
+                assistant_selector = "[data-message-author-role='assistant'], div.markdown.prose, .markdown"
+                try:
+                    before_count = chat_page.locator(assistant_selector).count()
+                except Exception:
+                    before_count = 0
+
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 📋 Đã thấy ô nhập ChatGPT, đang paste prompt + dữ liệu bài/comment đã quét..."))
+                composer.click(timeout=10000)
+                chat_page.keyboard.press("Control+A")
+                chat_page.keyboard.insert_text(prompt)
+                if not self.interruptible_sleep(random.uniform(0.5, 1.2)):
+                    return None
+
+                send_selectors = "[data-testid='send-button'], button[aria-label*='Send' i], button[aria-label*='Gửi' i]"
+                try:
+                    send_button = chat_page.locator(send_selectors).last
+                    if send_button.is_visible(timeout=2500):
+                        send_button.click(timeout=10000)
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã bấm nút gửi prompt sang ChatGPT."))
+                    else:
+                        chat_page.keyboard.press("Enter")
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
+                except Exception:
+                    chat_page.keyboard.press("Enter")
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
+
+                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
+                try:
+                    chat_page.wait_for_function(
+                        "([selector, count]) => document.querySelectorAll(selector).length > count",
+                        [assistant_selector, before_count],
+                        timeout=180000,
+                    )
+                except Exception:
+                    pass
+                try:
+                    chat_page.wait_for_function(
+                        "() => !document.querySelector('[data-testid=\"stop-button\"], button[aria-label*=\"Stop\" i], button[aria-label*=\"Dừng\" i]')",
+                        timeout=180000,
+                    )
+                except Exception:
+                    pass
+                if not self.interruptible_sleep(1.5):
+                    return None
+
+                responses = chat_page.locator(assistant_selector).evaluate_all(
+                    "nodes => nodes.map(node => (node.innerText || node.textContent || '').trim()).filter(Boolean)"
+                )
+                raw_comment = responses[-1] if responses else ""
+                is_valid, reason = validate_ai_comment(raw_comment, min_words=7)
+                if is_valid:
+                    return raw_comment.strip().strip('"“”')
+                if reason == "skip":
+                    return "SKIP_COMMENT"
+                self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
+                return None
+            finally:
+                try:
+                    chat_context.close()
+                except Exception:
+                    pass
 
     def attach_images_to_chatgpt(self, chat_page, image_paths, acc_name):
         valid_paths = [path for path in (image_paths or []) if os.path.exists(path)]
