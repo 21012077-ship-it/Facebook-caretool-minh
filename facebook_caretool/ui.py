@@ -1712,6 +1712,27 @@ class FacebookCareTool(ctk.CTk):
             profile_dir = self.chatgpt_profile_entry.get().strip() or DEFAULT_CHATGPT_PROFILE_DIR
         return {"enabled": enabled, "profile_dir": profile_dir}
 
+    def resolve_chatgpt_profile_dir(self, profile_dir):
+        """Chuẩn hoá profile ChatGPT để log rõ Chrome đang dùng đúng thư mục nào."""
+        profile_dir = str(profile_dir or DEFAULT_CHATGPT_PROFILE_DIR).strip() or DEFAULT_CHATGPT_PROFILE_DIR
+        return os.path.abspath(os.path.expanduser(profile_dir))
+
+    def acquire_chatgpt_browser_lock(self, acc_name, profile_dir):
+        """Chờ Chrome ChatGPT rảnh, đồng thời log định kỳ để người dùng biết vì sao chưa thấy paste."""
+        waited_seconds = 0
+        while not self.task_stop_event.is_set():
+            if self.chatgpt_browser_lock.acquire(timeout=1):
+                if waited_seconds:
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Chrome ChatGPT đã rảnh, bắt đầu mở profile để paste prompt."))
+                return True
+            waited_seconds += 1
+            if waited_seconds == 5 or waited_seconds % 15 == 0:
+                self.after(0, lambda n=acc_name, d=profile_dir, w=waited_seconds: self.append_live_log(
+                    f"[{n}] ⏳ Vẫn đang chờ Chrome ChatGPT/profile rảnh ({w}s): {d}. "
+                    "Nếu bạn đang mở cửa sổ ChatGPT đăng nhập thủ công, hãy đăng nhập xong rồi đóng cửa sổ đó để tool paste prompt."
+                ))
+        return False
+
     def build_comment_from_scanned_content(self, page, scanned_post_text, fallback_content, acc_name, ai_comment_settings, target_comment_text=""):
         if not ai_comment_settings.get("enabled"):
             self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ❌ ChatGPT thủ công đang tắt, bỏ qua link vì không thể tạo comment."))
@@ -1736,11 +1757,14 @@ class FacebookCareTool(ctk.CTk):
 
     def generate_comment_with_manual_chatgpt(self, scanned_post_text, acc_name, target_comment_text="", chatgpt_profile_dir=DEFAULT_CHATGPT_PROFILE_DIR):
         prompt = build_ai_comment_prompt(scanned_post_text, target_comment_text)
-        chatgpt_profile_dir = chatgpt_profile_dir or DEFAULT_CHATGPT_PROFILE_DIR
+        chatgpt_profile_dir = self.resolve_chatgpt_profile_dir(chatgpt_profile_dir)
         self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🔐 Dùng phiên đăng nhập ChatGPT đã lưu trong Chrome/profile riêng '{d}' (không nạp cookie thủ công)."))
         self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🔒 Chờ Chrome ChatGPT riêng nhận request: {d}"))
-        with self.chatgpt_browser_lock:
+        if not self.acquire_chatgpt_browser_lock(acc_name, chatgpt_profile_dir):
+            return None
+        try:
             with sync_playwright() as chat_playwright:
+                self.after(0, lambda n=acc_name, d=chatgpt_profile_dir: self.append_live_log(f"[{n}] 🌐 Đang mở Chrome ChatGPT bằng profile: {d}"))
                 chat_context = chat_playwright.chromium.launch_persistent_context(
                     chatgpt_profile_dir,
                     channel="chrome",
@@ -1792,6 +1816,7 @@ class FacebookCareTool(ctk.CTk):
                     except Exception:
                         before_count = 0
 
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 📋 Đã thấy ô nhập ChatGPT, đang paste prompt + dữ liệu bài/comment đã quét..."))
                     composer.click(timeout=10000)
                     chat_page.keyboard.press("Control+A")
                     chat_page.keyboard.insert_text(prompt)
@@ -1803,10 +1828,13 @@ class FacebookCareTool(ctk.CTk):
                         send_button = chat_page.locator(send_selectors).last
                         if send_button.is_visible(timeout=2500):
                             send_button.click(timeout=10000)
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã bấm nút gửi prompt sang ChatGPT."))
                         else:
                             chat_page.keyboard.press("Enter")
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
                     except Exception:
                         chat_page.keyboard.press("Enter")
+                        self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ✅ Đã gửi prompt sang ChatGPT bằng phím Enter."))
 
                     self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏳ Đang chờ ChatGPT trả comment trên web..."))
                     try:
@@ -1843,6 +1871,11 @@ class FacebookCareTool(ctk.CTk):
                         chat_context.close()
                     except Exception:
                         pass
+        finally:
+            try:
+                self.chatgpt_browser_lock.release()
+            except RuntimeError:
+                pass
 
     def attach_images_to_chatgpt(self, chat_page, image_paths, acc_name):
         valid_paths = [path for path in (image_paths or []) if os.path.exists(path)]
@@ -2400,7 +2433,7 @@ class FacebookCareTool(ctk.CTk):
     def open_chatgpt_login_browser(self):
         """Mở Chrome/profile ChatGPT để người dùng tự đăng nhập và lưu phiên."""
         self.save_app_settings_without_popup()
-        profile_dir = self.get_ai_comment_settings().get("profile_dir") or DEFAULT_CHATGPT_PROFILE_DIR
+        profile_dir = self.resolve_chatgpt_profile_dir(self.get_ai_comment_settings().get("profile_dir") or DEFAULT_CHATGPT_PROFILE_DIR)
 
         def worker():
             try:
