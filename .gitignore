@@ -32,3 +32,5 @@ Thumbs.db
 node_modules/
 fb_comment_profile/
 .tmp_fb_comment_media/
+
+chatgpt_profile/
