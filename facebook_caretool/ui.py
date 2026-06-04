@@ -91,6 +91,9 @@ class FacebookCareTool(ctk.CTk):
         self.history_render_generation = 0
         self.browser_render_job = None
         self.browser_render_generation = 0
+        self.is_closing = False
+        self.playwright_sessions = {}
+        self.playwright_sessions_lock = threading.Lock()
         self.protocol("WM_DELETE_WINDOW", self.on_app_close)
 
         self.build_ui()
@@ -117,8 +120,71 @@ class FacebookCareTool(ctk.CTk):
             messagebox.showinfo("Đã lưu", "Đã lưu nội dung comment.")
 
     def on_app_close(self):
+        """Dừng task và đóng các phiên Playwright trước khi thoát app.
+
+        Nếu app bị destroy trong lúc Chrome/Playwright còn đang gửi event về
+        Python, tiến trình driver Node có thể bị mất đầu pipe và in lỗi
+        ``EPIPE: broken pipe, write``. Vì vậy khi người dùng đóng cửa sổ
+        chính, ta phát tín hiệu dừng, mở pause để các worker thoát vòng lặp,
+        rồi chủ động đóng context/browser đang được app quản lý.
+        """
+        if self.is_closing:
+            return
+
+        self.is_closing = True
+        self.task_stop_event.set()
+        self.task_pause_event.set()
         self.save_comment_content()
+
+        for job_attr in (
+            "comment_content_save_job",
+            "account_refresh_job",
+            "account_render_job",
+            "history_refresh_job",
+            "history_render_job",
+            "browser_render_job",
+        ):
+            job_id = getattr(self, job_attr, None)
+            if job_id:
+                try:
+                    self.after_cancel(job_id)
+                except Exception:
+                    pass
+                setattr(self, job_attr, None)
+
+        self.close_active_playwright_sessions()
         self.destroy()
+
+    def register_playwright_session(self, browser=None, context=None):
+        session = {"browser": browser, "context": context}
+        with self.playwright_sessions_lock:
+            token = id(session)
+            self.playwright_sessions[token] = session
+        return token
+
+    def unregister_playwright_session(self, token):
+        if token is None:
+            return
+        with self.playwright_sessions_lock:
+            self.playwright_sessions.pop(token, None)
+
+    def close_playwright_session(self, session):
+        for resource_name in ("context", "browser"):
+            resource = session.get(resource_name)
+            if resource is None:
+                continue
+            try:
+                resource.close()
+            except Exception:
+                pass
+
+    def close_active_playwright_sessions(self):
+        with self.playwright_sessions_lock:
+            sessions = list(self.playwright_sessions.values())
+            self.playwright_sessions.clear()
+
+        for session in sessions:
+            self.close_playwright_session(session)
 
     def save_accounts(self):
         self.storage.save_accounts(self.accounts)
@@ -1796,6 +1862,7 @@ class FacebookCareTool(ctk.CTk):
                     "--disable-blink-features=AutomationControlled",
                 ],
             )
+            chat_session_token = self.register_playwright_session(context=chat_context)
             try:
                 chat_page = chat_context.pages[0] if chat_context.pages else chat_context.new_page()
                 chat_page.goto("https://chatgpt.com/?temporary-chat=true", wait_until="domcontentloaded", timeout=90000)
@@ -1858,7 +1925,7 @@ class FacebookCareTool(ctk.CTk):
                 try:
                     chat_page.wait_for_function(
                         "([selector, count]) => document.querySelectorAll(selector).length > count",
-                        [assistant_selector, before_count],
+                        arg=[assistant_selector, before_count],
                         timeout=180000,
                     )
                 except Exception:
@@ -1885,6 +1952,7 @@ class FacebookCareTool(ctk.CTk):
                 self.after(0, lambda n=acc_name, r=reason, c=raw_comment[:120]: self.append_live_log(f"[{n}] ⚠️ Comment ChatGPT không hợp lệ ({r}): {c}"))
                 return None
             finally:
+                self.unregister_playwright_session(chat_session_token)
                 try:
                     chat_context.close()
                 except Exception:
@@ -2466,6 +2534,7 @@ class FacebookCareTool(ctk.CTk):
                                 "--disable-blink-features=AutomationControlled",
                             ],
                         )
+                        session_token = self.register_playwright_session(context=context)
                         try:
                             page = context.pages[0] if context.pages else context.new_page()
                             page.goto("https://chatgpt.com/", wait_until="domcontentloaded", timeout=90000)
@@ -2474,9 +2543,10 @@ class FacebookCareTool(ctk.CTk):
                                 f"Chrome ChatGPT đã mở. Hãy đăng nhập trong cửa sổ đó.\n\n"
                                 f"Sau khi thấy ô chat ChatGPT, bạn có thể đóng cửa sổ Chrome. Phiên đăng nhập sẽ được lưu trong profile:\n{d}",
                             ))
-                            while context.pages:
+                            while context.pages and not self.is_task_stopped():
                                 time.sleep(1)
                         finally:
+                            self.unregister_playwright_session(session_token)
                             try:
                                 context.close()
                             except Exception:
@@ -3230,7 +3300,9 @@ class FacebookCareTool(ctk.CTk):
         return self.automation_service.parse_proxy(proxy_text)
 
     def create_browser_page(self, p, cookies, account=None):
-        return self.automation_service.create_browser_page(p, cookies, account)
+        browser, context, page = self.automation_service.create_browser_page(p, cookies, account)
+        self.register_playwright_session(browser=browser, context=context)
+        return browser, context, page
 
     def save_account_cookies(self, account, cookies):
         cookie_file = self.automation_service.save_cookies(account, cookies)
@@ -3715,7 +3787,7 @@ class FacebookCareTool(ctk.CTk):
             f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ tự lưu cookie sau khi bạn đăng nhập; hãy tự đóng Chrome khi xong."
         ))
 
-        while browser.is_connected():
+        while browser.is_connected() and not self.is_task_stopped():
             open_pages = [ctx_page for ctx_page in context.pages if not ctx_page.is_closed()]
             if not open_pages:
                 break
