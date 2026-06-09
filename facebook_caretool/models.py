@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 
-ACCOUNT_STATUSES = {"active", "checkpoint", "cookie_error"}
+ACCOUNT_STATUSES = {"active", "checkpoint", "cookie_error", "proxy_error"}
 CARE_PROFILES = {"auto", "warmup", "balanced", "reels_focus", "newsfeed_focus", "rest", "manual"}
 PROXY_ACTION_COOLDOWN_HOURS = 24
 _PROXY_LOCK_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
@@ -101,6 +101,7 @@ class Account:
     last_care: str = "Chưa nuôi"
     care_profile: str = "auto"
     care_plan_note: str = ""
+    last_error_reason: str = ""
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Account":
@@ -126,6 +127,7 @@ class Account:
             last_care=str(data.get("last_care") or "Chưa nuôi"),
             care_profile=care_profile,
             care_plan_note=str(data.get("care_plan_note") or ""),
+            last_error_reason=str(data.get("last_error_reason") or ""),
         )
 
     def to_dict(self) -> Dict[str, Any]:

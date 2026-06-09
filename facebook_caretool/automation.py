@@ -10,45 +10,79 @@ from urllib.parse import urlparse
 from .utils import parse_proxy
 
 USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+    # Chrome 131-136 Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    # Chrome 131-136 macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    # Edge 135-136
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36 Edg/135.0.0.0",
+    # Safari macOS 17.x
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
 ]
 
 
 def apply_playwright_stealth(page: Any) -> None:
     try:
+        # 1. Ẩn webdriver flag
         page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {
-                get: () => undefined
-            });
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
         """)
+        # 2. Languages phù hợp Vietnamese user
         page.add_init_script("""
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['vi-VN', 'vi', 'en-US', 'en']
             });
         """)
+        # 3. Plugins giả lập giống trình duyệt thật (có .item(), .namedItem(), .refresh())
         page.add_init_script("""
+            const makePlugin = (name, desc, filename, mimeTypes) => ({
+                name, description: desc, filename,
+                length: mimeTypes.length,
+                item: (i) => mimeTypes[i] || null,
+                namedItem: (n) => mimeTypes.find(m => m.type === n) || null,
+            });
+            const plugins = [
+                makePlugin('PDF Viewer', 'Portable Document Format', 'internal-pdf-viewer', []),
+                makePlugin('Chrome PDF Viewer', 'Portable Document Format', 'mhjfbmdgcfjbbpaeojofohoefgiehjai', []),
+                makePlugin('Chromium PDF Viewer', 'Portable Document Format', 'internal-pdf-viewer', []),
+            ];
             Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3]
+                get: () => Object.assign(plugins, { length: plugins.length, item: i => plugins[i], namedItem: n => plugins.find(p => p.name === n), refresh: () => {} })
             });
         """)
+        # 4. window.chrome – cần có để qua fingerprint check cơ bản
         page.add_init_script("""
-            if (window.navigator.webdriver === true) {
-                Object.defineProperty(window.navigator, 'webdriver', {get: () => false});
+            if (!window.chrome) {
+                window.chrome = { runtime: {}, loadTimes: () => null, csi: () => null, app: {} };
+            }
+        """)
+        # 5. Notifications permission behavior
+        page.add_init_script("""
+            const origQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) =>
+                parameters.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : origQuery(parameters);
+        """)
+        # 6. Hardware concurrency & deviceMemory realistic values
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+            if ('deviceMemory' in navigator) {
+                Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
             }
         """)
     except Exception as exc:
-        print(f"Lỗi khi apply mini stealth: {str(exc)}")
+        print(f"Lỗi khi apply stealth: {str(exc)}")
 
 
 class AutomationService:
@@ -87,7 +121,14 @@ class AutomationService:
                 data = json.load(file)
             cookies_to_process = data["cookies"] if isinstance(data, dict) and "cookies" in data else data
             return [self.normalize_cookie(cookie) for cookie in cookies_to_process]
-        except Exception:
+        except json.JSONDecodeError as exc:
+            print(f"[WARN] Cookie file bị corrupt ({cookie_file}): {exc}")
+            return []
+        except OSError as exc:
+            print(f"[WARN] Không đọc được cookie file ({cookie_file}): {exc}")
+            return []
+        except Exception as exc:
+            print(f"[WARN] Lỗi không xác định khi load cookie ({cookie_file}): {exc}")
             return []
 
     def build_cookie_path(self, account: Dict[str, Any], cookie_dir: str = "cookies") -> str:
@@ -105,8 +146,22 @@ class AutomationService:
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
 
-        with open(cookie_file, "w", encoding="utf-8") as file:
-            json.dump(cookies, file, indent=4, ensure_ascii=False)
+        import json as _json, tempfile as _tempfile
+        payload = _json.dumps(cookies, indent=4, ensure_ascii=False)
+        target_path = cookie_file
+        target_dir = os.path.dirname(os.path.abspath(target_path)) or "."
+        try:
+            with _tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=target_dir, delete=False, suffix=".tmp") as tf:
+                temp_name = tf.name
+                tf.write(payload)
+            os.replace(temp_name, target_path)
+        except Exception:
+            try:
+                import pathlib
+                pathlib.Path(temp_name).unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
 
         account["cookie_file"] = cookie_file
         return cookie_file
@@ -147,8 +202,9 @@ class AutomationService:
             return False
 
         parsed = urlparse(url)
-        host = (parsed.netloc or "").lower()
-        return "facebook.com" in host and not self.is_facebook_login_or_security_url(url)
+        host = (parsed.netloc or "").lower().split(":")[0]  # strip port
+        is_facebook = host == "facebook.com" or host.endswith(".facebook.com")
+        return is_facebook and not self.is_facebook_login_or_security_url(url)
 
 
     def looks_like_logged_out_landing_text(self, text: str | None) -> bool:
@@ -186,7 +242,8 @@ class AutomationService:
         launch_options: Dict[str, Any] = {
             "channel": "chrome",
             "headless": False,
-            "slow_mo": 200,
+            # Giảm slow_mo từ 200ms xuống 80ms → thao tác nhanh hơn
+            "slow_mo": 80,
             "args": [
                 "--disable-extensions",
                 "--disable-features=Translate",
@@ -199,12 +256,47 @@ class AutomationService:
             launch_options["proxy"] = proxy_config
 
         browser = playwright.chromium.launch(**launch_options)
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent=random.choice(self.user_agents),
-        )
-        if cookies:
-            context.add_cookies(cookies)
-        page = context.new_page()
-        apply_playwright_stealth(page)
-        return browser, context, page
+        try:
+            context = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent=random.choice(self.user_agents),
+            )
+            if cookies:
+                context.add_cookies(cookies)
+            page = context.new_page()
+
+            # Chặn font + tracker → load nhanh hơn 20-40% (giống index.js optimizePagePerformance)
+            _BLOCKED_DOMAINS = (
+                "fonts.googleapis.com", "fonts.gstatic.com",
+                "connect.facebook.net/signals", "pixel.facebook.com",
+                "analytics.facebook.com", "graph.facebook.com/logging",
+            )
+            def _route_handler(route):
+                req = route.request
+                rtype = req.resource_type
+                url = req.url
+                # Chặn font
+                if rtype == "font":
+                    route.abort()
+                    return
+                # Chặn tracker/analytics Facebook (không ảnh hưởng chức năng)
+                if any(d in url for d in _BLOCKED_DOMAINS):
+                    route.abort()
+                    return
+                route.continue_()
+
+            page.route("**/*", _route_handler)
+
+            # Default timeout 30s (thay vì Playwright default 30s không thay đổi được)
+            page.set_default_timeout(30000)
+
+            apply_playwright_stealth(page)
+            return browser, context, page
+        except Exception:
+            try:
+                browser.close()
+            except Exception:
+                pass
+            raise
+
+

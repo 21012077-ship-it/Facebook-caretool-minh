@@ -1,2 +1,20 @@
-customtkinter>=5.2.0
-playwright>=1.40.0
+# === Core dependencies ===
+customtkinter>=5.2.2
+playwright>=1.47.0
+
+# === AI Comment Providers (chọn 1 hoặc nhiều) ===
+# Option 1: Google Gemini API — miễn phí 1,500 req/ngày, tiếng Việt tốt nhất
+# pip install google-generativeai
+# google-generativeai>=0.8.0
+
+# Option 2: Groq API — nhanh nhất (~0.5s/req), miễn phí 14,400 req/ngày
+# pip install groq
+# groq>=0.11.0
+
+# Option 3: OpenRouter API — truy cập 200+ model, nhiều model miễn phí
+# pip install openai
+# openai>=1.50.0
+
+# Option 4: Ollama (local AI) — offline, không giới hạn, privacy tuyệt đối
+# pip install httpx
+# httpx>=0.27.0

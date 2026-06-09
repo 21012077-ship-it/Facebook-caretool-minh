@@ -323,8 +323,10 @@ def build_contextual_facebook_comment(
     *,
     chooser=random.choice,
 ) -> str:
-    """Không còn sinh comment fallback; giữ hàm để tương thích import cũ."""
-    return ""
+    """Deprecated: Không còn sinh comment tự động trong code."""
+    import warnings
+    warnings.warn("build_contextual_facebook_comment() đã bị bỏ.", DeprecationWarning, stacklevel=2)
+    return fallback_comment
 
 
 AI_COMMENT_SYSTEM_PROMPT = """Bạn chỉ tạo đúng 1 bình luận Facebook tiếng Việt tự nhiên, bám sát ngữ cảnh bài viết. Nếu dữ liệu không đủ rõ để comment hợp lý, trả về đúng SKIP_COMMENT. Không giải thích."""
@@ -340,115 +342,135 @@ AI_COMMENT_BANNED_PATTERNS = [
 ]
 
 
-def build_ai_comment_prompt(post_text: str | None, target_comment: str | None = None) -> str:
+def build_ai_comment_prompt(post_text: str | None, target_comment: str | None = None, image_description: str | None = None) -> str:
+    """Tao prompt theo template cua user.
+
+    Mapping:
+      {{title}}             -> post_text
+      {{image_description}} -> image_description (hoac "(Khong co hinh anh)")
+      {{comment}}           -> target_comment (hoac huong dan comment thang vao bai)
+    """
     normalized_post = re.sub(r"\s+", " ", (post_text or "")).strip()[:3500]
-    normalized_target_comment = re.sub(r"\s+", " ", (target_comment or "")).strip()[:1200]
-    if normalized_target_comment:
-        return f"""Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và trả lời comment rất tự nhiên.
+    normalized_comment = re.sub(r"\s+", " ", (target_comment or "")).strip()[:800]
+    normalized_image = re.sub(r"\s+", " ", (image_description or "")).strip()[:500]
 
-Luồng bắt buộc:
-Bước 1: Đọc kỹ nội dung bài viết và hình ảnh/thumbnail nếu có.
-Bước 2: Đọc kỹ comment đang cần trả lời.
-Bước 3: Viết đúng 1 câu phản hồi vừa liên quan tới bài viết, vừa ăn khớp trực tiếp với comment đó.
+    title_val = normalized_post or "(Không lấy được nội dung bài)"
+    image_val = normalized_image or "(Không có hình ảnh)"
 
-Nhiệm vụ:
-Dựa trên cả 2 phần ngữ cảnh dưới đây, hãy viết 1 reply vào comment. Reply phải nghe như người thật đang phản hồi comment trong thread, không phải comment mới độc lập vào bài.
+    if normalized_comment:
+        comment_val = normalized_comment
+    else:
+        comment_val = "(Không có comment cụ thể — hãy bình luận thẳng vào bài viết)"
 
-Phong cách mong muốn:
-- Tiếng Việt tự nhiên, Gen Z vừa phải, hơi đời
-- Bám sát chi tiết cụ thể của bài viết và ý của comment cần trả lời
-- Có thể đồng tình, trêu nhẹ, nối ý, bắt miếng hoặc bổ sung ngắn gọn
-- Không công kích cá nhân, không chửi tục nặng, không gây war
-- Không viết như chatbot, không văn mẫu, không nghị luận dài
+    return (
+        "Bạn là người Việt Nam trẻ, thường xuyên lướt Facebook và bình luận rất tự nhiên, đời thường.\n"
+        "\n"
+        "Nhiệm vụ: Đọc kỹ 3 phần dữ liệu bên dưới, sau đó viết ra **1 bình luận** phù hợp nhất.\n"
+        "\n"
+        "**Yêu cầu phong cách:**\n"
+        "- Viết như người thật đang dùng Facebook, không giống chatbot\n"
+        "- Tiếng Việt tự nhiên, hơi Gen Z nhưng không quá lố\n"
+        "- Tiếng Việt CÓ DẤU đầy đủ (KHÔNG viết không dấu như 'khong co', 'binh luan')\n"
+        "- Bình luận ngắn gọn, đời thường, có cảm xúc (5–20 từ)\n"
+        "- Bám sát nội dung bài viết, hình ảnh và comment cần phản hồi\n"
+        "- Có thể đồng tình, trêu nhẹ, bắt trend, nói ý hoặc phản hồi vui vẻ\n"
+        "- Không viết dài dòng, không văn mẫu, không giải thích lan man\n"
+        "- Không spam, không quảng cáo lộ liễu\n"
+        "- Không công kích cá nhân, không gây war, không toxic\n"
+        "- Không dùng emoji quá nhiều, tối đa 1 emoji nếu thật sự hợp\n"
+        "\n"
+        "**Quy tắc bắt buộc:**\n"
+        "- Chỉ viết đúng 1 bình luận, không giải thích, không tiêu đề, không lựa chọn khác\n"
+        "- Nếu comment gốc là câu hỏi → trả lời đúng trọng tâm\n"
+        "- Nếu comment gốc là đùa vui → đáp lại vui vẻ\n"
+        "- Nếu nội dung nhạy cảm → phản hồi nhẹ nhàng, trung lập\n"
+        "\n"
+        "---\n"
+        "\n"
+        f"[NỘI DUNG BÀI VIẾT]\n{title_val}\n"
+        "\n"
+        f"[MÔ TẢ HÌNH ẢNH]\n{image_val}\n"
+        "\n"
+        f"[COMMENT CẦN PHẢN HỒI]\n{comment_val}\n"
+        "\n"
+        "Hãy viết 1 bình luận Facebook tự nhiên nhất:"
+    )
 
-Yêu cầu bắt buộc:
-- Chỉ viết 1 reply duy nhất
-- Bắt buộc độ dài: Phải viết thành một câu hoàn chỉnh từ 7 đến 25 từ.
-- Không lặp lại nguyên văn caption hoặc comment gốc
-- Không giải thích, không thêm dấu ngoặc kép
-- Không thêm tiền tố như “Reply:” hoặc “Comment:”
-- Nếu thiếu nội dung bài viết hoặc không quét được comment cần trả lời, trả về đúng SKIP_COMMENT.
 
-Dữ liệu bài viết:
-- Page/account name: (đã gộp trong dữ liệu quét nếu lấy được)
-- Post text: {normalized_post or '(không lấy được)'}
-- Hashtags: (đã gộp trong dữ liệu quét nếu có)
-- Image/video thumbnail text nếu có: (đã gộp trong dữ liệu quét nếu lấy được)
+def clean_ai_response(text: str | None) -> str:
+    """Strip cac tien to/hau to ma model co the tu them vao truoc khi validate.
 
-Comment cần trả lời:
-- {normalized_target_comment or '(không lấy được)'}
+    Vi du:
+        "Reply: abc xyz"              -> "abc xyz"
+        "Output: xyz"                 -> "xyz"
+        "Comment: X\\nReply:\\nabc"   -> "abc"
+        '"abc xyz"'                   -> "abc xyz"
+        "Tro lai: abc"                -> "abc"
+    """
+    if not text:
+        return ""
+    s = text.strip()
 
-Hãy trả về đúng 1 reply phù hợp với cả bài viết và comment cần trả lời."""
+    # Xoa pattern "Comment/Input: ...\\nReply/Output:\\n<reply>"
+    multi_match = re.search(
+        r"(?:comment|nhan xet|input)[^\n]*\n(?:reply|tro lai|output)[:\s]*\n?(.+)",
+        s,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if multi_match:
+        s = multi_match.group(1).strip()
 
-    return f"""Bạn là một người trẻ Việt Nam thường xuyên lướt Facebook và bình luận rất tự nhiên.
+    # Xoa tien to don: "Reply:", "Output:", "Comment:", "Tro lai:", ...
+    s = re.sub(
+        r"^(?:reply|output|comment|tro lai|nhan xet|result|cau reply|cau comment)[:\s]+",
+        "",
+        s,
+        flags=re.IGNORECASE,
+    ).strip()
 
-Nhiệm vụ:
-Đọc kỹ toàn bộ ngữ cảnh của bài đăng Facebook, bao gồm:
-- Tên page hoặc tài khoản đăng bài
-- Nội dung caption/post text
-- Hashtag
-- Chữ trong ảnh hoặc thumbnail video nếu có
+    # Xoa dau ngoac kep bao quanh neu co
+    if len(s) >= 2 and s[0] in ('"', "'", "\u201c", "\u201d") and s[-1] in ('"', "'", "\u201c", "\u201d"):
+        s = s[1:-1].strip()
 
-Sau đó viết ra đúng 1 bình luận phù hợp nhất với bài đăng.
+    # Giu dong dau tien neu tra ve nhieu dong
+    first_line = s.split("\n")[0].strip()
+    if first_line:
+        return first_line
+    return s.strip()
 
-Phong cách bình luận mong muốn:
-- Kiểu Gen Z Việt Nam, tự nhiên, hơi đời
-- Giống người thật lướt thấy bài rồi comment ngay
-- Bám rất sát nội dung cụ thể của bài
-- Có thể hùa theo, thả miếng, trêu nhẹ, cà khịa nhẹ, bắt đúng tình huống gây cười hoặc chi tiết nổi bật
-- Ưu tiên những câu khiến người đọc thấy “comment này đúng bài ghê”
-- Không viết như chatbot
-- Không văn mẫu
-- Không nghị luận dài dòng
 
-Yêu cầu bắt buộc:
-- Chỉ viết 1 comment duy nhất
-- Bắt buộc độ dài: Phải viết thành một câu hoàn chỉnh từ 7 đến 25 từ. Tuyệt đối không bình luận cụt lủn 1, 2 chữ.
-- Bám sát nội dung cụ thể của bài, không viết kiểu chung chung như “hay quá”, “đỉnh thật”, “xịn nha”
-- Không lặp lại nguyên văn caption
-- Không giải thích, không thêm dấu ngoặc kép
-- Không cố nhồi trend nếu không hợp ngữ cảnh
-- Không câu nào cũng phải có emoji
-- Nếu dùng emoji thì chỉ 0–1 emoji là đủ
-- Trả về SKIP_COMMENT nếu không có nội dung rõ ràng để bình luận.
-- Không dùng kiểu giọng AI như:
-  + "mình nghĩ nên nhìn theo từng tình huống thực tế"
-  + "mỗi người có thể có một góc nhìn khác nhau"
-  + "nội dung này rất đáng suy ngẫm"
-  + "đây là một vấn đề thú vị"
-  + "rất đồng tình với quan điểm này"
-- Không dùng các lời khen rỗng như:
-  + "hay quá"
-  + "đỉnh thật"
-  + "tuyệt vời"
-  + "xịn nha"
-  nếu không thực sự hợp ngữ cảnh
-- Không lạm dụng emoji
-- Nếu dùng emoji thì chỉ 0 hoặc 1 emoji
-- Có thể dùng khẩu ngữ tự nhiên nếu hợp bài, nhưng hãy ghép thành câu đủ ý, ví dụ:
-  + trời ơi chi tiết này nhìn là thấy có mùi rồi nha
-  + pha này lộ quá rồi, ai mà chịu nổi được chứ
-  + nói vậy ai tin, nhìn phản ứng là biết liền rồi
-  + tình huống này không ổn nha, tới công chuyện thật rồi
-  + cười kiểu này là dở rồi, chắc còn drama tiếp đây
+def _has_vietnamese_diacritics(text: str) -> bool:
+    """Trả về True nếu text có ít nhất 1 ký tự tiếng Việt có dấu.
+    
+    Dùng để phát hiện AI trả về tiếng Việt không dấu (e.g. 'Nhung khi mua oto').
+    """
+    viet_chars = (
+        "àáâãäåæèéêëìíîïòóôõöùúûüýÿ"
+        "ÀÁÂÃÄÅÆÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝ"
+        # Đặc trưng tiếng Việt
+        "ăắặằẳẵÂấậầẩẫđĐơớợờởỡưứựừửữ"
+        "ÃẠẢÔỒỔỖỘỚỢỜỞỠưÚỨỰỪỬỮÝỴỶỸ"
+        "ạảãàáâấầẩẫậăắằẳẵặđèéêếềểễệ"
+        "ìíịỉĩòóôốồổỗộơớờởỡợùúưứừửữựỳỷỹỵ"
+    )
+    return any(c in viet_chars for c in text)
 
-Cách định hướng bình luận:
-- Nếu bài là meme/phim/tình huống hài: phản ứng vui, bắt đúng chi tiết gây cười
-- Nếu bài có tình huống yêu đương/thả thính/couple: trêu nhẹ, tinh nghịch
-- Nếu bài có drama nhẹ: hóng hớt vừa phải, không công kích
-- Nếu bài cảm xúc: đồng cảm ngắn gọn, tự nhiên
-- Nếu bài quảng bá phim/chương trình: bình luận như một người xem đang phản ứng vào nội dung thú vị của bài, không viết kiểu quảng cáo
-- Nếu bài đăng không đủ ngữ cảnh, dữ liệu quét bị rác hoặc không hiểu được nội dung, trả về chính xác chuỗi:
-SKIP_COMMENT
-
-Dữ liệu bài viết:
-- Page/account name: (đã gộp trong dữ liệu quét nếu lấy được)
-- Post text: {normalized_post or '(không lấy được)'}
-- Hashtags: (đã gộp trong dữ liệu quét nếu có)
-- Image/video thumbnail text nếu có: (đã gộp trong dữ liệu quét nếu lấy được)
-
-Hãy trả về đúng 1 bình luận phù hợp nhất."""
-
+def _looks_like_unaccented_vietnamese(text: str) -> bool:
+    """Phát hiện tiếng Việt không dấu: nhiều từ Latin nhưng KHÔNG CÓ dấu nào."""
+    import re as _re
+    # Chỉ kiểm tra khi text đủ dài (>= 4 từ)
+    words = text.split()
+    if len(words) < 4:
+        return False
+    # Đếm từ thuần Latin (chỉ a-z, không dấu)
+    latin_words = [w for w in words if _re.fullmatch(r"[a-zA-Z']+", w)]
+    if len(latin_words) < 3:
+        return False   # Ít từ Latin → bình thường (emoji, số, tiếng Anh thật)
+    # Nếu > 60% là từ Latin thuần và không có dấu tiếng Việt → reject
+    ratio = len(latin_words) / len(words)
+    if ratio > 0.60 and not _has_vietnamese_diacritics(text):
+        return True
+    return False
 
 def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[bool, str]:
     normalized = normalize_comment_text(candidate)
@@ -465,6 +487,9 @@ def validate_ai_comment(candidate: str | None, *, min_words: int = 1) -> tuple[b
         return False, "too_long"
     if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in FACEBOOK_COMMENT_BLOCKLIST_PATTERNS):
         return False, "spam_filter"
+    # Reject tiếng Việt không dấu — trông rất fake trên Facebook
+    if _looks_like_unaccented_vietnamese(normalized):
+        return False, "no_diacritics"
     return True, ""
 
 def generate_ai_facebook_comment(
@@ -478,17 +503,15 @@ def generate_ai_facebook_comment(
     timeout: float = 25,
     requester: Any = None,
 ) -> str | None:
-    """Không còn gọi API AI; giữ hàm cũ để báo migration rõ ràng.
-
-    Luồng comment mới phải dùng :func:`build_ai_comment_prompt` rồi paste prompt
-    vào https://chatgpt.com trong browser đã đăng nhập cookie. Các tham số API
-    được giữ lại chỉ để không phá import cũ, nhưng tuyệt đối không tạo request
-    OpenAI/Gemini tại đây.
-    """
-    raise ValueError(
-        "Đã tắt hoàn toàn gọi API OpenAI/Gemini. Hãy dùng luồng ChatGPT thủ công "
-        "trên chatgpt.com bằng cookie trình duyệt."
+    """Deprecated: không còn gọi API AI. Dùng build_ai_comment_prompt() + ChatGPT web."""
+    import warnings
+    warnings.warn(
+        "generate_ai_facebook_comment() đã bị tắt. "
+        "Dùng build_ai_comment_prompt() + ChatGPT web trình duyệt.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    return None
 
 def build_comment_payloads(raw_content: str, media_paths: Optional[List[str]] = None) -> List[Dict[str, str]]:
     """Ghép nội dung comment với ảnh/video thành từng gói không tách rời.
@@ -518,7 +541,10 @@ def spin_content(text: str, chooser=random.choice) -> str:
 
     previous = None
     current = text
-    while previous != current:
+    max_iterations = 50  # Guard against infinite loops with malformed input
+    iterations = 0
+    while previous != current and iterations < max_iterations:
         previous = current
         current = re.sub(r"\{([^{}]*)\}", spin, current)
+        iterations += 1
     return current
