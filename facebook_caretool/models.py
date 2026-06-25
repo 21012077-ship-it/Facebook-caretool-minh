@@ -102,6 +102,7 @@ class Account:
     care_profile: str = "auto"
     care_plan_note: str = ""
     last_error_reason: str = ""
+    views_count: str = ""
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Account":
@@ -128,6 +129,7 @@ class Account:
             care_profile=care_profile,
             care_plan_note=str(data.get("care_plan_note") or ""),
             last_error_reason=str(data.get("last_error_reason") or ""),
+            views_count=str(data.get("views_count") or ""),
         )
 
     def to_dict(self) -> Dict[str, Any]:

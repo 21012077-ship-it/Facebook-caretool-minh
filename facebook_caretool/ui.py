@@ -50,7 +50,7 @@ from datetime import datetime
 ACCOUNTS_FILE = "accounts.json"
 LOGS_FILE = "logs.json"
 DEFAULT_COMMENT_CONTENT = ""
-ACCOUNT_RENDER_BATCH_SIZE = 60
+ACCOUNT_RENDER_BATCH_SIZE = 15  # render từng lô nhỏ để không đứng UI
 BROWSER_RENDER_BATCH_SIZE = 80
 HISTORY_RENDER_BATCH_SIZE = 60
 DEFAULT_CHATGPT_PROFILE_DIR = "chatgpt_profile"
@@ -385,8 +385,8 @@ class FacebookCareTool(ctk.CTk):
         # ── THANH THỐNG KÊ NHANH (4 cards nhỏ gọn) ─────────────────────────────
         self.dashboard = ctk.CTkFrame(left_care, fg_color="transparent")
         self.dashboard.grid(row=1, column=0, sticky="ew", padx=20, pady=(4, 6))
-        for col in range(7):
-            self.dashboard.grid_columnconfigure(col, weight=1 if col in (0,1,2,3) else 0)
+        for col in range(8):
+            self.dashboard.grid_columnconfigure(col, weight=1 if col in (0,1,2,3,4) else 0)
 
         # 5 stat cards
         self.live_card        = self._stat_card(self.dashboard, "🟢 Live",        "0", "#14532d", "#166534", 0)
@@ -397,7 +397,7 @@ class FacebookCareTool(ctk.CTk):
 
         # Separator + filter + nút hành động (bên phải dashboard)
         filter_box = ctk.CTkFrame(self.dashboard, fg_color="#1e293b", corner_radius=10)
-        filter_box.grid(row=0, column=4, columnspan=3, sticky="nsew", padx=(8, 0))
+        filter_box.grid(row=0, column=5, columnspan=3, sticky="nsew", padx=(8, 0))
 
         self.filter_var = ctk.StringVar(value="all")
         filter_inner = ctk.CTkFrame(filter_box, fg_color="transparent")
@@ -422,8 +422,12 @@ class FacebookCareTool(ctk.CTk):
             btn_row, text="✕ Bỏ chọn", height=30, width=90,
             fg_color="#374151", hover_color="#4b5563", font=("Arial", 12),
             command=self.clear_selected_accounts
+        ).pack(side="left", padx=(0, 5))
+        ctk.CTkButton(
+            btn_row, text="🔌 Tối ưu Proxy", height=30, width=110,
+            fg_color="#059669", hover_color="#047857", font=("Arial", 12),
+            command=self.optimize_proxies
         ).pack(side="left")
-
         # ── BẢNG DANH SÁCH TÀI KHOẢN ────────────────────────────────────────────
         self.table_outer = ctk.CTkFrame(left_care, fg_color="#0f172a", corner_radius=14)
         self.table_outer.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 6))
@@ -435,7 +439,7 @@ class FacebookCareTool(ctk.CTk):
         self.table_header.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 2))
         self.configure_table_columns(self.table_header)
 
-        col_labels = ["", "Tên tài khoản", "Proxy", "Trạng thái", "Kiểu nuôi", "Lần cuối nuôi", "Ghi chú", "Thao tác"]
+        col_labels = ["", "Tên tài khoản", "Proxy", "Trạng thái", "Kiểu nuôi", "Lần cuối nuôi", "Lượt xem", "Ghi chú", "Thao tác"]
         for col, text in enumerate(col_labels):
             ctk.CTkLabel(
                 self.table_header, text=text,
@@ -605,6 +609,15 @@ class FacebookCareTool(ctk.CTk):
             fg_color="#7f1d1d", hover_color="#991b1b",
             command=self.delete_selected_account
         ).pack(side="left")
+
+        acc_action_row2 = ctk.CTkFrame(self.detail_box, fg_color="transparent")
+        acc_action_row2.pack(fill="x", padx=12, pady=(0, 12))
+        ctk.CTkButton(
+            acc_action_row2, text="🎭 Đổi tên: NetfIix Tiệm Phim",
+            height=34, font=("Arial", 12, "bold"),
+            fg_color="#8b5cf6", hover_color="#7c3aed",
+            command=self.change_name_selected_account
+        ).pack(side="left", fill="x", expand=True)
 
         # ── CÀI ĐẶT THÔNG SỐ NUÔI ───────────────────────────────────────────────
         self.settings_box = ctk.CTkFrame(self.detail, fg_color="#1e293b", corner_radius=12)
@@ -923,6 +936,13 @@ class FacebookCareTool(ctk.CTk):
             right_panel,
             text="Quét bài rồi tự nghĩ comment phù hợp",
             variable=self.scan_before_cmt_var,
+        ).pack(anchor="w", padx=20, pady=(4, 4))
+
+        self.direct_comment_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            right_panel,
+            text="Bình luận thẳng vào bài (không reply comment khác)",
+            variable=self.direct_comment_var,
         ).pack(anchor="w", padx=20, pady=(4, 4))
 
         ctk.CTkLabel(
@@ -1298,6 +1318,7 @@ class FacebookCareTool(ctk.CTk):
             return
         max_parallel_tabs = min(max_parallel_tabs, len(selected_indexes))
         like_before_comment = self.like_before_cmt_var.get()
+        direct_comment = self.direct_comment_var.get()
 
         threading.Thread(
             target=self.run_comment_task,
@@ -1310,6 +1331,7 @@ class FacebookCareTool(ctk.CTk):
                 max_parallel_tabs,
                 like_before_comment,
                 scan_before_comment,
+                direct_comment,
             ),
             daemon=True
         ).start()
@@ -1413,8 +1435,7 @@ class FacebookCareTool(ctk.CTk):
                 full_context = ""
 
         if full_context and len(full_context) >= 8:
-            preview = full_context[:160] + ("..." if len(full_context) > 160 else "")
-            self.after(0, lambda n=acc_name, text=preview, chars=len(full_context): self.append_live_log(
+            self.after(0, lambda n=acc_name, text=full_context, chars=len(full_context): self.append_live_log(
                 f"[{n}] ✅ Đã quét được {chars} ký tự nội dung bài:\n"
                 f"{text}\n"
                 f"========================"
@@ -1813,13 +1834,16 @@ class FacebookCareTool(ctk.CTk):
             'div[role="textbox"][contenteditable="true"][aria-label*="bình luận" i]:not([aria-label*="phản hồi" i])',
             'div[role="textbox"][contenteditable="true"][aria-label*="comment" i]:not([aria-label*="reply" i])',
             'div[role="textbox"][contenteditable="true"][aria-label*="viết" i]',
-            'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]',
+            'div[role="textbox"][contenteditable="true"][data-lexical-editor="true"]:not([aria-label*="phản hồi" i]):not([aria-label*="reply" i]):not([aria-label*="tìm kiếm" i])',
+            'div[role="textbox"][contenteditable="true"]:not([aria-label*="phản hồi" i]):not([aria-label*="reply" i]):not([aria-label*="tìm kiếm" i])',
         ]
         comment_button_selectors = [
             "div[role='button'][aria-label='Bình luận'], div[aria-label='Bình luận']",
             "div[role='button'][aria-label='Comment'], div[aria-label='Comment']",
             "span:has-text('Bình luận')",
             "span:has-text('Comment')",
+            "div[role='button']:has-text('Bình luận')",
+            "div[role='button']:has-text('Comment')",
         ]
 
         # Giảm 4 → 2 vòng; sleep 0.5-1.0s thay vì 1.0-1.8s → tiết kiệm ~5s
@@ -2081,12 +2105,12 @@ class FacebookCareTool(ctk.CTk):
                 images_b64 = download_post_images_as_base64(page, img_infos, max_images=2)
                 if images_b64:
                     self.after(0, lambda n=acc_name, c=len(images_b64): self.append_live_log(
-                        f"[{n}] ✅ Đã tải {c} ảnh, AI sẽ comment dựa trên cả ảnh + text."
+                        f"[{n}] 🖼️ Đã chụp {c} ảnh (screenshot), AI sẽ nhận cả ảnh + text."
                     ))
                     return images_b64
                 else:
                     self.after(0, lambda n=acc_name: self.append_live_log(
-                        f"[{n}] ⚠️ Tìm thấy ảnh nhưng không tải được (CDN block), tiếp tục với text."
+                        f"[{n}] ⚠️ Không chụp được ảnh (element không tìm thấy / ẩn), tiếp tục với text."
                     ))
             elif total_raw > 0:
                 self.after(0, lambda n=acc_name, r=total_raw: self.append_live_log(
@@ -2149,7 +2173,7 @@ class FacebookCareTool(ctk.CTk):
                     comment = None
                 else:
                     self.after(0, lambda n=acc_name, c=comment: self.append_live_log(
-                        f"[{n}] ✅ AI sinh comment: {c[:80]}"
+                        f"[{n}] ✅ AI sinh comment: {c}"
                     ))
                     return comment
 
@@ -2357,6 +2381,7 @@ class FacebookCareTool(ctk.CTk):
         max_parallel_tabs=1,
         like_before_comment=True,
         scan_before_comment=True,
+        direct_comment=False,
     ):
         delay_range = self.delay_cmt_input.get()
         comment_image_paths = [path for path in (comment_image_paths or []) if os.path.exists(path)]
@@ -2462,18 +2487,73 @@ class FacebookCareTool(ctk.CTk):
 
                     if not self.ensure_proxy_action_allowed(account):
                         return
-                    account_profile_url = self.resolve_account_profile_url(account)
-                    if account_profile_url:
-                        self.after(0, lambda n=acc_name, u=account_profile_url: self.append_live_log(f"[{n}] 🧭 Mở profile/fanpage của chính tài khoản trước khi comment: {u}"))
-                        self.safe_goto(page, account_profile_url, account=account)
-                        # Kiểm tra checkpoint sau khi vào profile
-                        if self.is_checkpoint_url(page.url):
-                            self.set_account_state(account, "checkpoint",
-                                reason=f"Phát hiện checkpoint khi vào profile: {page.url[:80]}",
-                                log_name=acc_name)
-                            return
-                        if not self.interruptible_sleep(random.uniform(3, 6)):
-                            return
+                    dashboard_url = "https://www.facebook.com/professional_dashboard/"
+                    self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🧭 Mở Professional Dashboard để lấy lượt xem..."))
+                    self.safe_goto(page, dashboard_url, account=account)
+                    
+                    if self.is_checkpoint_url(page.url):
+                        self.set_account_state(account, "checkpoint",
+                            reason=f"Phát hiện checkpoint khi vào dashboard: {page.url[:80]}",
+                            log_name=acc_name)
+                        return
+                        
+                    # Lấy lượt xem bằng JS
+                    try:
+                        page.wait_for_timeout(3000) # Đợi load
+                        views_text = page.evaluate('''() => {
+                            let walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                            let node;
+                            while(node = walker.nextNode()) {
+                                if (node.nodeValue.trim().toLowerCase() === "lượt xem") {
+                                    let parent = node.parentElement;
+                                    while (parent && parent.innerText) {
+                                        let lines = parent.innerText.split('\\n').map(l => l.trim()).filter(l => l.length > 0);
+                                        let idx = lines.findIndex(l => l.toLowerCase() === "lượt xem");
+                                        if (idx > 0) {
+                                            for(let k = idx - 1; k >= 0; k--) {
+                                                if (/^[\\d,.]+$/.test(lines[k])) {
+                                                    return lines[k];
+                                                }
+                                            }
+                                        }
+                                        parent = parent.parentElement;
+                                        if (parent && parent.tagName === 'BODY') break;
+                                    }
+                                }
+                            }
+                            return null;
+                        }''')
+                        if views_text:
+                            old_views_raw = account.get("views_count", "").split(" ")[0].replace(",", "").replace(".", "")
+                            new_views_raw = views_text.replace(",", "").replace(".", "")
+                            
+                            diff_str = ""
+                            try:
+                                if old_views_raw and new_views_raw.isdigit() and old_views_raw.isdigit():
+                                    diff = int(new_views_raw) - int(old_views_raw)
+                                    if diff > 0:
+                                        diff_str = f" (+{diff})"
+                                    elif diff < 0:
+                                        diff_str = f" ({diff})"
+                            except Exception:
+                                pass
+                                
+                            final_views_text = f"{views_text}{diff_str}"
+                            self.after(0, lambda n=acc_name, v=final_views_text: self.append_live_log(f"[{n}] 👁️ Lượt xem từ dashboard: {v}"))
+                            account["views_count"] = final_views_text
+                            self.save_accounts()
+                            try:
+                                idx = self.accounts.index(account)
+                                self.after(0, lambda i=idx: self.refresh_account_row(i))
+                            except ValueError:
+                                pass
+                        else:
+                            self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⚠️ Không tìm thấy số lượt xem trên dashboard."))
+                    except Exception as e:
+                        self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(f"[{n}] ⚠️ Lỗi lấy lượt xem: {err[:100]}"))
+                    
+                    if not self.interruptible_sleep(random.uniform(2, 4)):
+                        return
 
                     for url in acc_urls:
                         if not self.wait_if_paused():
@@ -2499,13 +2579,38 @@ class FacebookCareTool(ctk.CTk):
                             ))
                             continue
 
-                        # Kiểm tra checkpoint/block ngay sau khi vào bài
+                        # Kiểm tra checkpoint / đăng xuất / block ngay sau khi vào bài
                         page_problem = self.detect_page_problem(page)
                         if page_problem == "checkpoint":
                             self.set_account_state(account, "checkpoint",
                                 reason="Phát hiện trang checkpoint sau khi vào bài",
                                 log_name=acc_name)
                             break
+                        elif page_problem == "logged_out":
+                            self.after(0, lambda n=acc_name: self.append_live_log(
+                                f"[{n}] 🔓 Phát hiện đăng xuất giữa phiên comment, đang đăng nhập lại..."
+                            ))
+                            try:
+                                self.ensure_login(context, page, account)
+                                if self.is_checkpoint_url(page.url):
+                                    self.set_account_state(account, "checkpoint",
+                                        reason="Checkpoint sau khi đăng nhập lại",
+                                        log_name=acc_name)
+                                    break
+                                self.after(0, lambda n=acc_name: self.append_live_log(
+                                    f"[{n}] ✅ Đăng nhập lại thành công, thử lại bài hiện tại..."
+                                ))
+                                # Quay lại URL bài để thử lại
+                                try:
+                                    self.safe_goto(page, url, account=account)
+                                except Exception:
+                                    pass
+                            except Exception as login_exc:
+                                self.after(0, lambda n=acc_name, e=str(login_exc)[:80]: self.append_live_log(
+                                    f"[{n}] ❌ Đăng nhập lại thất bại: {e}. Dừng tài khoản này."
+                                ))
+                                break
+                            continue
                         elif page_problem == "spam_block":
                             self.after(0, lambda n=acc_name: self.append_live_log(
                                 f"[{n}] 🚫 Tài khoản bị block/giới hạn, bỏ qua bài này."
@@ -2515,6 +2620,53 @@ class FacebookCareTool(ctk.CTk):
                         # Giảm sleep sau goto: 2.5-4s thay vì 4-7s
                         if not self.interruptible_sleep(random.uniform(2.5, 4.0)):
                             break
+
+                        # Ép cứng: Nếu URL có chứa "/photo" thì ưu tiên tìm nút Xem bài viết
+                        if "/photo/" in page.url or "/photo" in page.url or "/photo.php" in page.url:
+                            self.after(0, lambda n=acc_name: self.append_live_log(
+                                f"[{n}] 📸 Link ảnh (/photo), ép tìm nút 'Xem bài viết'..."
+                            ))
+                            try:
+                                # Sử dụng Regex không phân biệt chữ hoa chữ thường
+                                import re
+                                view_post_btn = page.get_by_role("link", name=re.compile(r"xem bài viết|view post", re.IGNORECASE)).first
+                                
+                                # Nếu vẫn không có, tìm bằng CSS selectors
+                                if not view_post_btn.is_visible(timeout=1000):
+                                    view_post_btn = page.locator("div[role='link']:has-text('Xem bài viết'), div[role='link']:has-text('View post'), a:has-text('Xem bài viết'), a:has-text('View post')").locator("visible=true").last
+
+                                if view_post_btn.is_visible(timeout=3000):
+                                    view_post_btn.click(timeout=5000, force=True)
+                                    # Chờ URL chuyển sang bài viết gốc
+                                    try:
+                                        page.wait_for_load_state("domcontentloaded", timeout=5000)
+                                    except: pass
+                                    if not self.interruptible_sleep(random.uniform(2.5, 4.0)):
+                                        break
+                                else:
+                                    self.after(0, lambda n=acc_name: self.append_live_log(
+                                        f"[{n}] ℹ️ Không có nút 'Xem bài viết', tiếp tục xử lý trực tiếp trên giao diện ảnh..."
+                                    ))
+                            except Exception as e:
+                                self.after(0, lambda n=acc_name, err=str(e): self.append_live_log(
+                                    f"[{n}] ℹ️ Bỏ qua click Xem bài viết: {err[:50]}"
+                                ))
+                        else:
+                            # Giữ phương án dự phòng cho các link không phải /photo nhưng vẫn bật popup ảnh
+                            try:
+                                view_post_btn = page.locator(
+                                    "text='Xem bài viết', text='View post'"
+                                ).locator("visible=true").last
+                                
+                                if view_post_btn.is_visible(timeout=1500):
+                                    self.after(0, lambda n=acc_name: self.append_live_log(
+                                        f"[{n}] 📸 Phát hiện chế độ xem ảnh popup, đang mở bài viết gốc..."
+                                    ))
+                                    view_post_btn.click(timeout=3000, force=True)
+                                    if not self.interruptible_sleep(random.uniform(2.5, 4.0)):
+                                        break
+                            except Exception:
+                                pass
 
 
                         page.mouse.wheel(0, 400)
@@ -2537,7 +2689,11 @@ class FacebookCareTool(ctk.CTk):
 
                             # Scan comment scoped vào post_element nếu có
                             # scan_comment_to_reply giờ trả về (text, already_clicked)
-                            scan_comment_result = self.scan_comment_to_reply(page, acc_name, post_element)
+                            if direct_comment:
+                                scan_comment_result = ("", False)
+                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] 🎯 Đang bật chế độ bình luận thẳng vào bài..."))
+                            else:
+                                scan_comment_result = self.scan_comment_to_reply(page, acc_name, post_element)
                             if scan_comment_result is None:
                                 break
                             if isinstance(scan_comment_result, tuple):
@@ -2617,7 +2773,7 @@ class FacebookCareTool(ctk.CTk):
                             self.after(
                                 0,
                                 lambda n=acc_name, text=final_content: self.append_live_log(
-                                    f"[{n}] 💬 AI đề xuất: {text[:80]}"
+                                    f"[{n}] 💬 AI đề xuất: {text}"
                                 ),
                             )
 
@@ -2687,7 +2843,10 @@ class FacebookCareTool(ctk.CTk):
                                 failed_count += 1
                                 self.after(0, lambda s=success_count, f=failed_count: self.update_comment_stats(success=s, failed=f))
                             err_str = str(e)
-                            self.after(0, lambda n=acc_name, err=err_str[:80]: self.append_live_log(f"[{n}] ❌ Lỗi: Không thể gửi comment vào bài post. {err}"))
+                            if "Không tìm thấy ô nhập comment" in err_str:
+                                self.after(0, lambda n=acc_name: self.append_live_log(f"[{n}] ⏭️ Bỏ qua: Không có ô nhập comment (Có thể bài viết bị khóa comment)."))
+                            else:
+                                self.after(0, lambda n=acc_name, err=err_str[:80]: self.append_live_log(f"[{n}] ❌ Lỗi khi gửi comment: {err}"))
                             # Kiểm tra nếu lỗi là do checkpoint/proxy
                             if self.is_proxy_error(err_str):
                                 self.set_account_state(account, "proxy_error",
@@ -2799,7 +2958,8 @@ class FacebookCareTool(ctk.CTk):
         account = self.accounts[self.browser_selected_index]
         account["last_open"] = datetime.now().strftime("%d/%m/%Y %H:%M")
         self.save_accounts()
-        self.refresh_accounts()
+        if self.browser_selected_index is not None and self.browser_selected_index < len(self.accounts):
+            self.refresh_account_row(self.browser_selected_index)
         self.refresh_browser_accounts()
         threading.Thread(target=self.open_browser, args=(account, target_url), daemon=True).start()
 
@@ -3061,6 +3221,64 @@ class FacebookCareTool(ctk.CTk):
                 self.after(0, lambda e=str(exc): self.append_live_log(f"[ChatGPT] ❌ Không mở được Chrome ChatGPT: {e[:160]}"))
 
         threading.Thread(target=worker, daemon=True).start()
+    def optimize_proxies(self):
+        all_proxies = set()
+        for acc in self.accounts:
+            p = (acc.get("proxy") or "").strip()
+            if p:
+                all_proxies.add(p)
+                
+        if not all_proxies:
+            messagebox.showinfo("Thông báo", "Hệ thống chưa có proxy nào được sử dụng.")
+            return
+
+        dialog = ctk.CTkInputDialog(text="Mỗi proxy nên có tối đa bao nhiêu acc Live (khuyên dùng: 3 hoặc 4)?", title="Tối ưu Proxy")
+        try:
+            val = dialog.get_input()
+            if val is None:
+                return
+            target_count = int(val)
+        except Exception:
+            messagebox.showwarning("Lỗi", "Vui lòng nhập một số hợp lệ.")
+            return
+
+        if target_count < 1:
+            return
+
+        proxy_live_count = {p: 0 for p in all_proxies}
+        for acc in self.accounts:
+            if acc.get("status") == "active":
+                p = (acc.get("proxy") or "").strip()
+                if p in proxy_live_count:
+                    proxy_live_count[p] += 1
+                    
+        underutilized_proxies = [p for p, c in proxy_live_count.items() if c < target_count]
+        
+        if not underutilized_proxies:
+            messagebox.showinfo("Thông báo", f"Tất cả proxy đều đã đủ {target_count} acc Live! Không cần tối ưu thêm.")
+            return
+            
+        available_accs = [acc for acc in self.accounts if acc.get("status") == "active" and not (acc.get("proxy") or "").strip()]
+        
+        if not available_accs:
+            messagebox.showinfo("Thông báo", "Không có tài khoản Live nào trống proxy để điền vào chỗ thiếu.")
+            return
+            
+        assigned_count = 0
+        acc_idx = 0
+        for proxy in underutilized_proxies:
+            needed = target_count - proxy_live_count[proxy]
+            while needed > 0 and acc_idx < len(available_accs):
+                acc = available_accs[acc_idx]
+                acc["proxy"] = proxy
+                mark_proxy_changed(acc)
+                assigned_count += 1
+                needed -= 1
+                acc_idx += 1
+                
+        self.save_accounts()
+        self.refresh_accounts()
+        messagebox.showinfo("Thành công", f"Đã tự động phân bổ {assigned_count} tài khoản trống proxy vào các proxy bị thiếu slot!")
 
     def export_accounts_safe(self):
         include_sensitive = self.export_sensitive_var.get()
@@ -3179,14 +3397,15 @@ class FacebookCareTool(ctk.CTk):
         while time.time() < end_time:
             if not self.wait_if_paused():
                 return False
-            time.sleep(min(0.2, max(0, end_time - time.time())))
+            # Poll 500ms thay vì 200ms — giảm CPU khi nhiều acc chạy song song
+            time.sleep(min(0.5, max(0, end_time - time.time())))
         return not self.is_task_stopped()
 
     # --- CÁC HÀM TIỆN ÍCH CHUNG ---
     def configure_table_columns(self, frame):
-        widths = [42, 170, 170, 115, 185, 150, 200, 150]
+        widths = [42, 150, 140, 115, 160, 130, 90, 150, 140]
         for col, width in enumerate(widths):
-            frame.grid_columnconfigure(col, minsize=width, weight=1 if col in (1, 2, 6) else 0)
+            frame.grid_columnconfigure(col, minsize=width, weight=1 if col in (1, 2, 7) else 0)
 
     def get_care_profile_menu_values(self):
         return list(CARE_PROFILE_LABELS.values())
@@ -3256,33 +3475,50 @@ class FacebookCareTool(ctk.CTk):
         }.get(status, "Không rõ")
 
     def append_live_log(self, message):
+        """Thêm dòng log — dùng buffer để batch write, giảm áp lực lên Tkinter event loop."""
         line = f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
         self.log_lines.append(line)
-
-        if not hasattr(self, "live_log_text"):
-            self.log_lines = self.log_lines[-80:]
-            return
-
-        # --- Main log sidebar ---
-        widget = self.live_log_text
-        widget.configure(state="normal")
-        widget.insert("end", line + "\n")
         if len(self.log_lines) > 80:
             self.log_lines.pop(0)
-            widget.delete("1.0", "2.0")
-        widget.see("end")
-        widget.configure(state="disabled")
 
-        # --- Mirror vào terminal comment (nếu đang ở tab comment) ---
-        if hasattr(self, "comment_log_text"):
+        # Buffer: gom nhiều dòng, flush 1 lần sau 80ms thay vì write ngay mỗi dòng
+        if not hasattr(self, "_log_buffer"):
+            self._log_buffer = []
+        self._log_buffer.append(line)
+        if not getattr(self, "_log_flush_scheduled", False):
+            self._log_flush_scheduled = True
+            self.after(80, self._flush_log_buffer)
+
+    def _flush_log_buffer(self):
+        """Ghi toàn bộ buffer log vào Text widget trong 1 lần duy nhất."""
+        self._log_flush_scheduled = False
+        if not self._log_buffer:
+            return
+        lines_to_write = "\n".join(self._log_buffer) + "\n"
+        self._log_buffer.clear()
+
+        if hasattr(self, "live_log_text"):
+            w = self.live_log_text
             try:
-                cw = self.comment_log_text
+                w.configure(state="normal")
+                w.insert("end", lines_to_write)
+                # Giữ tối đa 80 dòng
+                line_count = int(w.index("end-1c").split(".")[0])
+                if line_count > 80:
+                    w.delete("1.0", f"{line_count - 80}.0")
+                w.see("end")
+                w.configure(state="disabled")
+            except Exception:
+                pass
+
+        if hasattr(self, "comment_log_text"):
+            cw = self.comment_log_text
+            try:
                 cw.configure(state="normal")
-                cw.insert("end", line + "\n")
-                # Giữ 200 dòng trong comment terminal
-                total_lines = int(cw.index("end-1c").split(".")[0])
-                if total_lines > 200:
-                    cw.delete("1.0", "2.0")
+                cw.insert("end", lines_to_write)
+                line_count = int(cw.index("end-1c").split(".")[0])
+                if line_count > 200:
+                    cw.delete("1.0", f"{line_count - 200}.0")
                 cw.see("end")
                 cw.configure(state="disabled")
             except Exception:
@@ -3327,8 +3563,8 @@ class FacebookCareTool(ctk.CTk):
     def schedule_accounts_refresh(self, event=None):
         if self.account_refresh_job:
             self.after_cancel(self.account_refresh_job)
-        # Tăng debounce lên 300ms: gộp nhiều lần gọi liên tiếp vào 1 lần render
-        self.account_refresh_job = self.after(300, self.refresh_accounts)
+        # Tăng debounce lên 500ms: gộp nhiều lần gọi liên tiếp vào 1 lần render
+        self.account_refresh_job = self.after(500, self.refresh_accounts)
 
     def _cancel_account_render_job(self):
         if self.account_render_job:
@@ -3384,10 +3620,22 @@ class FacebookCareTool(ctk.CTk):
             corner_radius=10
         )
         row_frame.pack(fill="x", padx=0, pady=4)
-        self.configure_table_columns(row_frame)
         self.account_rows[index] = row_frame
+        self._render_account_row_content(row_frame, index, acc)
 
-        # Cache proxy_action_locked — trước đây gọi 5 lần/row gây lag
+    def refresh_account_row(self, index):
+        if not hasattr(self, "account_rows") or index not in self.account_rows:
+            return
+        row_frame = self.account_rows[index]
+        for widget in row_frame.winfo_children():
+            widget.destroy()
+        row_frame.configure(fg_color="#1f2937" if index != self.selected_index else "#263244")
+        if index < len(self.accounts):
+            self._render_account_row_content(row_frame, index, self.accounts[index])
+
+    def _render_account_row_content(self, row_frame, index, acc):
+        self.configure_table_columns(row_frame)
+
         locked = self.proxy_action_locked(acc)
 
         is_checked = ctk.BooleanVar(value=index in self.selected_accounts)
@@ -3431,10 +3679,14 @@ class FacebookCareTool(ctk.CTk):
 
         last_touch = acc.get("last_care") or acc.get("last_open") or "Chưa tương tác"
         ctk.CTkLabel(row_frame, text=last_touch, text_color="#9ca3af", anchor="w").grid(row=0, column=5, sticky="ew", padx=8, pady=10)
-        ctk.CTkLabel(row_frame, text=acc.get("note", ""), text_color="#cbd5e1", anchor="w").grid(row=0, column=6, sticky="ew", padx=8, pady=10)
+        
+        views_count = acc.get("views_count", "-")
+        ctk.CTkLabel(row_frame, text=str(views_count), text_color="#38bdf8", anchor="w").grid(row=0, column=6, sticky="ew", padx=8, pady=10)
+        
+        ctk.CTkLabel(row_frame, text=acc.get("note", ""), text_color="#cbd5e1", anchor="w").grid(row=0, column=7, sticky="ew", padx=8, pady=10)
 
         action_box = ctk.CTkFrame(row_frame, fg_color="transparent")
-        action_box.grid(row=0, column=7, sticky="e", padx=8, pady=8)
+        action_box.grid(row=0, column=8, sticky="e", padx=8, pady=8)
 
         care_button_state = "disabled" if locked else "normal"
         ctk.CTkButton(action_box, text="Nuôi", width=58, height=30, state=care_button_state, command=lambda idx=index: self.select_and_care(idx)).pack(side="left", padx=3)
@@ -3452,13 +3704,21 @@ class FacebookCareTool(ctk.CTk):
         self.update_dashboard()
 
     def select_all_filtered_accounts(self):
+        to_refresh = []
         for index, _ in self.get_filtered_accounts():
-            self.selected_accounts.add(index)
-        self.refresh_accounts()
+            if index not in self.selected_accounts:
+                self.selected_accounts.add(index)
+                to_refresh.append(index)
+        for index in to_refresh:
+            self.refresh_account_row(index)
+        self.update_dashboard()
 
     def clear_selected_accounts(self):
+        old_selected = list(self.selected_accounts)
         self.selected_accounts.clear()
-        self.refresh_accounts()
+        for index in old_selected:
+            self.refresh_account_row(index)
+        self.update_dashboard()
 
     def get_current_care_settings(self):
         return {
@@ -3822,9 +4082,89 @@ class FacebookCareTool(ctk.CTk):
         account["last_open"] = datetime.now().strftime("%d/%m/%Y %H:%M")
         self.save_accounts()
         self.select_account(self.selected_index)
-        self.refresh_accounts()
+        self.refresh_account_row(self.selected_index)
 
         threading.Thread(target=self.open_browser, args=(account,), daemon=True).start()
+
+    def change_name_selected_account(self):
+        if self.selected_index is None:
+            messagebox.showwarning("Thông báo", "Hãy chọn tài khoản trước.")
+            return
+
+        account = self.accounts[self.selected_index]
+        if not account.get("uid"):
+            messagebox.showwarning("Thông báo", "Tài khoản này chưa có UID!")
+            return
+            
+        account["last_open"] = datetime.now().strftime("%d/%m/%Y %H:%M")
+        self.save_accounts()
+        self.select_account(self.selected_index)
+        self.refresh_account_row(self.selected_index)
+
+        threading.Thread(target=self._change_name_worker, args=(account,), daemon=True).start()
+
+    def _change_name_worker(self, account):
+        uid = account.get("uid")
+        try:
+            cookies = self.load_cookies(account)
+            with sync_playwright() as p:
+                browser, context, page = self.create_browser_page(p, cookies, account)
+                
+                self.after(0, lambda n=account.get("name", "Unknown"): self.append_live_log(f"[{n}] 🔄 Bắt đầu đổi tên: NetfIix Tiệm Phim..."))
+                
+                # 1. Đảm bảo đăng nhập
+                self.safe_goto(page, "https://www.facebook.com/", account=account)
+                self.ensure_login(context, page, account)
+                
+                # 2. Vào form đổi tên
+                url = f"https://accountscenter.facebook.com/profiles/{uid}/name"
+                self.safe_goto(page, url, account=account)
+                
+                # 3. Điền Tên và Họ
+                # Đợi có textbox xuất hiện trên trang
+                page.get_by_role("textbox").first.wait_for(timeout=30000, state="visible")
+                page.wait_for_timeout(1000) # Đợi DOM ổn định
+                
+                textboxes = page.get_by_role("textbox")
+                count = textboxes.count()
+                
+                if count >= 3:
+                    first_name_input = textboxes.nth(0)
+                    last_name_input = textboxes.nth(2)
+                elif count == 2:
+                    first_name_input = textboxes.nth(0)
+                    last_name_input = textboxes.nth(1)
+                else:
+                    first_name_input = textboxes.first
+                    last_name_input = textboxes.last
+                
+                first_name_input.fill("NetfIix")
+                last_name_input.fill("Tiệm Phim")
+                
+                # 4. Bấm Xem lại thay đổi
+                review_btn_selectors = 'button:has-text("Xem lại thay đổi"), button:has-text("Review Change"), button:has-text("Review change")'
+                page.locator(review_btn_selectors).first.click()
+                
+                # 5. Chờ nút Xong / Save changes hiển thị và bấm
+                done_btn_selectors = 'div[role="button"]:has-text("Xong"), button:has-text("Xong"), div[role="button"]:has-text("Done"), button:has-text("Done"), div[role="button"]:has-text("Lưu thay đổi"), button:has-text("Lưu thay đổi"), div[role="button"]:has-text("Save changes"), button:has-text("Save changes")'
+                page.wait_for_selector(done_btn_selectors, timeout=20000)
+                done_btn = page.locator(done_btn_selectors).first
+                done_btn.click()
+                
+                page.wait_for_timeout(4000)
+                
+                self.after(0, lambda n=account.get("name", "Unknown"): self.append_live_log(f"[{n}] ✅ Đổi tên thành công: NetfIix Tiệm Phim!"))
+                
+                account["name"] = "NetfIix Tiệm Phim"
+                self.save_accounts()
+                self.after(0, self.schedule_accounts_refresh)
+                
+                try:
+                    context.close()
+                except:
+                    pass
+        except Exception as e:
+            self.after(0, lambda n=account.get("name", "Unknown"), err=e: self.append_live_log(f"[{n}] ❌ Lỗi khi đổi tên: {err}"))
 
     def start_care_selected_account(self):
         if self.selected_index is None:
@@ -3887,15 +4227,22 @@ class FacebookCareTool(ctk.CTk):
                     or (plan.get("join_groups") and plan.get("max_join_groups", 0) > 0)
                 )
                 if not has_plan_action:
-                    skipped_count += 1
-                    self.append_live_log(f"Bỏ qua {account.get('name', 'Unknown')}: {plan.get('reason', '')}")
+                    if len(index_list) == 1:
+                        self.append_live_log(f"[{account.get('name', 'Unknown')}] Chuyển sang mở thủ công để xem trạng thái checkpoint/lỗi...")
+                        threading.Thread(target=self.open_browser, args=(account,), daemon=True).start()
+                    else:
+                        skipped_count += 1
+                        self.append_live_log(f"Bỏ qua {account.get('name', 'Unknown')}: {plan.get('reason', '')}")
                     continue
                 account["last_care"] = now
                 queued_count += 1
                 care_jobs.append((account, plan))
 
         self.save_accounts()
-        self.refresh_accounts()
+        for index in index_list:
+            if index < len(self.accounts):
+                self.refresh_account_row(index)
+                
         if self.selected_index is not None:
             self.select_account(self.selected_index)
 
@@ -4010,6 +4357,7 @@ class FacebookCareTool(ctk.CTk):
         "net::ERR_PROXY",
         "ProxyConnectionFailed",
         "Cannot connect to proxy",
+        "ERR_HTTP_RESPONSE_CODE_FAILURE",
     ]
 
     # Pattern checkpoint URL và nội dung trang
@@ -4083,7 +4431,31 @@ class FacebookCareTool(ctk.CTk):
             if self.is_checkpoint_url(url):
                 return "checkpoint"
 
-            # Lấy text trang (dùng timeout ngắn để không chận quá)
+            # Phát hiện đăng xuất qua URL
+            _LOGOUT_URL_PATTERNS = [
+                "facebook.com/login",
+                "facebook.com/r.php",
+                "facebook.com/reg",
+                "facebook.com/?refsrc=deprecated",
+            ]
+            if any(p in url for p in _LOGOUT_URL_PATTERNS):
+                return "logged_out"
+
+            # Phát hiện đăng xuất qua DOM (form đăng nhập hiện trên trang)
+            try:
+                has_login_form = page.evaluate(
+                    """() => {
+                        const email = document.querySelector('input[name="email"],input[id="email"],input[type="email"]');
+                        const pass  = document.querySelector('input[name="pass"],input[id="pass"],input[type="password"]');
+                        return !!(email && pass);
+                    }"""
+                )
+                if has_login_form:
+                    return "logged_out"
+            except Exception:
+                pass
+
+            # Lấy text trang (dùng timeout ngắn để không chặn quá)
             try:
                 content = page.evaluate("() => document.body?.innerText?.toLowerCase() || ''")
             except Exception:
@@ -4094,9 +4466,13 @@ class FacebookCareTool(ctk.CTk):
                     return "checkpoint"
                 if any(p in content for p in self._SPAM_BLOCK_PATTERNS):
                     return "spam_block"
-                # Đăng xuất
-                login_signals = ["email or phone", "mật khẩu", "phone number", "đăng nhập", "log in"]
-                if any(s in content for s in login_signals) and "facebook.com/login" in url:
+                # Fallback text-based: form đăng nhập xuất hiện nhưng URL chưa match
+                login_signals = [
+                    "email or phone", "mật khẩu", "phone number",
+                    "log in to facebook", "log into facebook",
+                    "đăng nhập vào facebook",
+                ]
+                if any(s in content for s in login_signals):
                     return "logged_out"
         except Exception:
             pass
@@ -4130,10 +4506,16 @@ class FacebookCareTool(ctk.CTk):
 
         self.after(0, lambda m=msg: self.append_live_log(m))
         self.save_accounts()
-        # Dùng schedule_accounts_refresh (debounce 300ms) thay vì direct refresh
-        # Khi nhiều account đổi state cùng lúc → gộp thành 1 lần rebuild duy nhất
-        self.after(0, self.schedule_accounts_refresh)
+        
+        try:
+            idx = self.accounts.index(account)
+            self.after(0, lambda: self._update_account_state_ui(idx))
+        except ValueError:
+            self.after(0, self.schedule_accounts_refresh)
 
+    def _update_account_state_ui(self, index):
+        self.update_dashboard()
+        self.refresh_account_row(index)
 
     def safe_goto(self, page, url, account=None, wait_until="domcontentloaded", timeout=60000, retries=2, fallback_urls=None):
         """
@@ -4474,7 +4856,7 @@ class FacebookCareTool(ctk.CTk):
                 button = page.locator(selector).locator("visible=true").first
                 if button.is_visible(timeout=700):
                     button.click(no_wait_after=True)
-                    time.sleep(2)
+                    time.sleep(1)  # 1s đủ để trang chuyển
                     break
             except Exception:
                 continue
@@ -4486,7 +4868,7 @@ class FacebookCareTool(ctk.CTk):
             pass
 
         self.safe_goto(page, "https://facebook.com/login/", account=account, fallback_urls=["https://www.facebook.com/login/", "https://m.facebook.com/login/"])
-        time.sleep(2)
+        time.sleep(1)
         return True
 
     def ensure_login(self, context, page, account):
@@ -4496,7 +4878,19 @@ class FacebookCareTool(ctk.CTk):
 
         # Vào thử trang chủ FB để check xem cookie có hoạt động không
         self.goto_facebook_home(page, account=account, mobile=True)
-        time.sleep(3)
+        # Chờ trang load xong thay vì sleep cứng — thoát sớm nếu proxy nhanh
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=5000)
+        except Exception:
+            pass
+
+        # -------------------------------------------------------------
+        # Kiểm tra Checkpoint ngay từ bước này trước khi cố gắng điền login
+        # -------------------------------------------------------------
+        prob = self.detect_page_problem(page)
+        if prob == "checkpoint":
+            self.set_account_state(account, "checkpoint", "Phát hiện Checkpoint ngay khi mở Facebook.")
+            raise Exception("Tài khoản đang bị Checkpoint (xác minh bảo mật).")
 
         # Nếu không bị đá ra trang đăng nhập/checkpoint/two_step -> Cookie vẫn sống.
         # Lưu ý: Facebook có thể trả về /?checkpoint_src=any sau khi login thành công;
@@ -4529,8 +4923,12 @@ class FacebookCareTool(ctk.CTk):
         # 2. Bấm phím Enter ngay tại ô mật khẩu để Submit Form
         pass_input.press("Enter")
 
-        self.after(0, lambda: self.append_live_log(f"[{uid}] Đã ấn Enter, chờ load 2FA/CAPTCHA..."))
-        time.sleep(8) # Tăng thời gian chờ lên 8s để đảm bảo mạng load xong trang 2FA/CAPTCHA
+        self.after(0, lambda: self.append_live_log(f"[{uid}] Đã ấn Enter, chờ FB phản hồi..."))
+        # Chờ FB navigate (thoát sớm khi URL thay đổi), tối đa 8s
+        try:
+            page.wait_for_url("**/facebook.com/**", timeout=8000)
+        except Exception:
+            pass
 
         if not self.wait_for_captcha_resolution(page, uid, timeout_seconds=60):
             account["status"] = "checkpoint"
@@ -4578,7 +4976,11 @@ class FacebookCareTool(ctk.CTk):
 
                 # Ấn Enter để Submit
                 two_fa_box.press("Enter")
-                time.sleep(8) # Tăng chờ lên 8s để FB load xong trang sau khi nhập 2FA
+                # Chờ FB navigate sau 2FA — thoát sớm khi URL thay đổi, tối đa 8s
+                try:
+                    page.wait_for_url("**/facebook.com/**", timeout=8000)
+                except Exception:
+                    pass
 
                 # Nếu Facebook hỏi "Tin cậy thiết bị này?", chọn ô/nút trắng
                 # (luôn xác nhận đây là tôi) thay vì nút xanh lưu/tin cậy thiết bị.
@@ -4628,28 +5030,51 @@ class FacebookCareTool(ctk.CTk):
             f"[{n}] 🌐 Đã mở trình duyệt thủ công. Tool sẽ tự lưu cookie sau khi bạn đăng nhập; hãy tự đóng Chrome khi xong."
         ))
 
-        while browser.is_connected() and not self.is_task_stopped():
+        while browser.is_connected():
             open_pages = [ctx_page for ctx_page in context.pages if not ctx_page.is_closed()]
             if not open_pages:
                 break
 
             try:
+                # Cập nhật trạng thái
+                current_status = account.get("status")
+                new_status = current_status
+                
+                if open_pages:
+                    prob = self.detect_page_problem(open_pages[-1])
+                    if prob == "checkpoint" or prob == "spam_block":
+                        new_status = "checkpoint"
+                    elif prob == "logged_out":
+                        new_status = "cookie_error"
+                    else:
+                        current_cookies = context.cookies()
+                        if self.has_facebook_login_cookie(current_cookies):
+                            new_status = "active"
+
+                if new_status != current_status:
+                    account["status"] = new_status
+                    self.save_accounts()
+                    
+                    try:
+                        idx = self.accounts.index(account)
+                        self.after(0, lambda i=idx: self._update_account_state_ui(i))
+                    except ValueError:
+                        self.after(0, self.schedule_accounts_refresh)
+
+                # Lưu cookie nếu có
                 current_cookies = context.cookies()
                 if self.has_facebook_login_cookie(current_cookies):
                     cookie_snapshot = self.build_cookie_snapshot(current_cookies)
                     if cookie_snapshot != saved_cookie_snapshot:
-                        account["status"] = "active"
                         cookie_path = self.save_account_cookies(account, current_cookies)
                         if cookie_path != saved_cookie_path:
                             self.after(0, lambda n=account_name, path=cookie_path: self.append_live_log(
-                                f"[{n}] ✅ Đã phát hiện đăng nhập thủ công và lưu cookie: {path}"
+                                f"[{n}] ✅ Đã phát hiện thay đổi cookie và lưu: {path}"
                             ))
                         saved_cookie_path = cookie_path
                         saved_cookie_snapshot = cookie_snapshot
             except Exception as e:
-                self.after(0, lambda n=account_name, err=e: self.append_live_log(
-                    f"[{n}] ⚠️ Chưa thể lưu cookie phiên thủ công: {err}"
-                ))
+                pass
 
             time.sleep(3)
 
@@ -4676,10 +5101,36 @@ class FacebookCareTool(ctk.CTk):
 
                 try:
                     self.safe_goto(page, target_url, account=account)
+                    
+                    uid = account.get("uid")
+                    pwd = account.get("password")
+                    if uid and pwd:
+                        # Kiểm tra xem có đang ở form đăng nhập không
+                        if page.locator("input[name='email'], input[id='email']").is_visible(timeout=2000):
+                            account_name = account.get("name") or uid or "Unknown"
+                            self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Đang tự động điền tài khoản/mật khẩu trong phiên thủ công..."))
+                            self.open_normal_login_form(page, account)
+                            page.locator('input[name="email"], input[id="email"]').first.fill(uid)
+                            page.locator('input[name="pass"], input[id="pass"]').first.fill(pwd)
+                            page.locator('input[name="pass"], input[id="pass"]').first.press("Enter")
+                            
+                            # Chờ 2FA và tự động điền nếu có
+                            two_fa = account.get("two_fa")
+                            if two_fa:
+                                two_fa_box = self.get_two_fa_box(page)
+                                if two_fa_box.is_visible(timeout=5000):
+                                    from utils.totp_utils import generate_totp_code
+                                    code = generate_totp_code(two_fa)
+                                    if code:
+                                        self.after(0, lambda n=account_name: self.append_live_log(f"[{n}] Đã tự động điền mã 2FA trong phiên thủ công..."))
+                                        two_fa_box.click()
+                                        page.wait_for_timeout(500)
+                                        two_fa_box.fill(code)
+                                        two_fa_box.press("Enter")
                 except Exception as navigation_error:
                     account_name = account.get("name") or account.get("uid") or "Unknown"
                     self.after(0, lambda n=account_name, err=navigation_error: self.append_live_log(
-                        f"[{n}] ⚠️ Không mở được URL ban đầu nhưng vẫn giữ Chrome để thao tác thủ công: {err}"
+                        f"[{n}] ⚠️ Lỗi trong quá trình thao tác ban đầu (nhưng Chrome vẫn mở để bạn xử lý): {err}"
                     ))
 
                 self.wait_for_manual_browser_close(browser, context, page, account)

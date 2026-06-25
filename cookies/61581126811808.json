@@ -14,20 +14,10 @@
         "value": "uvH-afIoSudwpOZGgEzdO2xB",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1813285594,
+        "expires": 1814985143,
         "httpOnly": true,
         "secure": true,
-        "sameSite": "Lax"
-    },
-    {
-        "name": "wd",
-        "value": "1280x800",
-        "domain": ".facebook.com",
-        "path": "/",
-        "expires": 1779760242,
-        "httpOnly": false,
-        "secure": true,
-        "sameSite": "Lax"
+        "sameSite": "None"
     },
     {
         "name": "ps_l",
@@ -50,61 +40,31 @@
         "sameSite": "Lax"
     },
     {
-        "name": "dpr",
-        "value": "1",
-        "domain": ".facebook.com",
-        "path": "/",
-        "expires": 1779355995,
-        "httpOnly": false,
-        "secure": true,
-        "sameSite": "None"
-    },
-    {
         "name": "c_user",
         "value": "61581126811808",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1810691442.574677,
+        "expires": 1811961159,
         "httpOnly": false,
-        "secure": true,
-        "sameSite": "None"
-    },
-    {
-        "name": "locale",
-        "value": "en_US",
-        "domain": ".oversightboardappeals.com",
-        "path": "/",
-        "expires": 1779594820,
-        "httpOnly": false,
-        "secure": true,
-        "sameSite": "None"
-    },
-    {
-        "name": "i_user",
-        "value": "61590187345685",
-        "domain": ".facebook.com",
-        "path": "/",
-        "expires": 1810687285,
-        "httpOnly": false,
-        "secure": true,
-        "sameSite": "None"
-    },
-    {
-        "name": "fr",
-        "value": "1bI4w89oIjLDbzk45.AWdUdfbSazyQeW1I12eFdCmwkY2_5YAFQqOTgVW-_MT5sKVXK_Y.BqC8H8..AAA.0.0.BqC8H8.AWeoqefG1HwG36otPNIXeHT3v9c",
-        "domain": ".facebook.com",
-        "path": "/",
-        "expires": 1786931442.57479,
-        "httpOnly": true,
         "secure": true,
         "sameSite": "None"
     },
     {
         "name": "xs",
-        "value": "34%3A6CGEUEPYkWXCRA%3A2%3A1778725601%3A-1%3A-1%3A%3AAcxu77Unc1eNRpJHNBu-qVJ7AIOvM5wT14G1Ce_SOeo",
+        "value": "9%3A4-KiG_DttFpmIw%3A2%3A1780425159%3A-1%3A-1%3A%3AAcxu52bWXMEiCMsBdytKqDmuml7oSttHk-NpgK1oVA",
         "domain": ".facebook.com",
         "path": "/",
-        "expires": 1810691442.574839,
+        "expires": 1811961159,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "None"
+    },
+    {
+        "name": "fr",
+        "value": "1PjutKCw0s9akKEFv.AWca-z61ZRdkYElazejgF_R9_h8LCobmijC4dyPi-otUOAb3aso.BqHyHY..AAA.0.0.BqHyHe.AWds8EkrEV879eOufsFLNqmba0I",
+        "domain": ".facebook.com",
+        "path": "/",
+        "expires": 1788201165,
         "httpOnly": true,
         "secure": true,
         "sameSite": "None"

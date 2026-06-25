@@ -123,7 +123,7 @@ function(root) {
             .filter(function(el) {
                 var cs = window.getComputedStyle(el);
                 if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-                if (el.closest('[role="button"]') || el.closest('nav') || el.closest('header')) return false;
+                if (el.closest('[role="button"]') || el.closest('nav') || el.closest('header') || el.closest('[role="navigation"]') || el.closest('[role="complementary"]') || el.closest('[role="banner"]')) return false;
                 // LOẠI TRỪ phần comment
                 if (isInCommentSection(el)) return false;
                 var t = (el.innerText || el.textContent || '').trim();
@@ -223,8 +223,8 @@ function(root) {
 _JS_PAGE_FALLBACK_TEXT = """
 (function() {
     var norm = function(v) { return String(v || '').replace(/\\s+/g, ' ').trim(); };
-    var actionNoise = /^(th\\u00edch|like|b\\u00ecnh lu\\u1eadn|comment|chia s\\u1ebb|share|ph\\u1ea3n h\\u1ed3i|reply|x\\u1ebem th\\u00eam|see more)$/i;
-    var metaNoise = /^(\\d+\\s*(gi\\u00e2y|ph\\u00fat|gi\\u1edd|ng\\u00e0y|s|m|h|d|w)\\s*(tr\\u01b0\\u1edbc)?|v\\u1eeba xong|just now)$/i;
+    var actionNoise = /^(th\\u00edch|like|b\\u00ecnh lu\\u1eadn|comment|chia s\\u1ebb|share|ph\\u1ea3n h\\u1ed3i|reply|x\\u1ebem th\\u00eam|see more|th\\u00f4ng b\\u00e1o|t\\u1ea5t c\\u1ea3|ch\\u01b0a \\u0111\\u1ecdc)$/i;
+    var metaNoise = /^(\\d+\\s*(gi\\u00e2y|ph\\u00fat|gi\\u1edd|ng\\u00e0y|s|m|h|d|w)\\s*(tr\\u01b0\\u1edbc)?|v\\u1eeba xong|just now|b\\u1ea1n \\u0111\\u00e3 t\\u1eaft|b\\u1eadt th\\u00f4ng b\\u00e1o|l\\u00fac kh\\u00e1c)$/i;
 
     // Ưu tiên dialog
     var dialog = document.querySelector('div[role="dialog"]');
@@ -233,7 +233,7 @@ _JS_PAGE_FALLBACK_TEXT = """
 
     var els = Array.from(target.querySelectorAll('div[dir="auto"], span[dir="auto"]'))
         .filter(function(el) {
-            if (el.closest('[role="button"]') || el.closest('nav') || el.closest('header')) return false;
+            if (el.closest('[role="button"]') || el.closest('nav') || el.closest('header') || el.closest('[role="navigation"]') || el.closest('[role="complementary"]') || el.closest('[role="banner"]')) return false;
             var cs = window.getComputedStyle(el);
             if (cs.display === 'none') return false;
             var t = (el.innerText || el.textContent || '').trim();
@@ -657,10 +657,13 @@ function(root) {
 
 
 
-# JS: Download ảnh qua browser (có auth cookie) và trả về base64 data URL
+# JS: Download ảnh qua browser (có auth cookie) — fallback khi screenshot thất bại
+# Dùng mode: 'no-cors' để tránh CORS block, tuy nhiên response body bị giới hạn
+# nên đây chỉ là fallback cuối cùng
 _JS_FETCH_IMAGE_AS_BASE64 = """
 async function(url) {
     try {
+        // Thử same-origin fetch trước (hoạt động nếu ảnh cùng domain)
         var resp = await fetch(url, { credentials: 'include', mode: 'cors' });
         if (!resp.ok) return null;
         var blob = await resp.blob();
@@ -673,6 +676,30 @@ async function(url) {
     } catch(e) {
         return null;
     }
+}
+"""
+
+# JS: Tìm element img bằng src URL (trả về element hoặc null)
+_JS_FIND_IMG_ELEMENT = """
+(src) => {
+    const imgs = Array.from(document.querySelectorAll('img'));
+    // Khớp chính xác currentSrc hoặc src
+    return imgs.find(img =>
+        img.currentSrc === src || img.src === src
+    ) || null;
+}
+"""
+
+# JS: Tìm element div[role="img"] chứa background-image có URL tương ứng
+_JS_FIND_DIV_IMG_ELEMENT = """
+(srcFragment) => {
+    const divs = Array.from(
+        document.querySelectorAll('div[role="img"], span[role="img"], i[role="img"]')
+    );
+    return divs.find(div => {
+        const bg = window.getComputedStyle(div).backgroundImage || '';
+        return bg.indexOf(srcFragment) >= 0;
+    }) || null;
 }
 """
 def _filter_cdn_images(raw_list: list) -> list[dict]:
@@ -737,23 +764,68 @@ def extract_post_images(post_element: Any, page: Any = None) -> list[dict]:
 
 
 def download_post_images_as_base64(page: Any, image_infos: list[dict], max_images: int = 2) -> list[str]:
-    """Download ảnh bài viết qua browser session → base64 data URL.
+    """Download ảnh bài viết → base64 data URL.
 
-    Dùng authenticated browser để tránh lỗi 403 với Facebook CDN.
-    Trả về list base64 data URL (data:image/jpeg;base64,...).
-    max_images: giới hạn số ảnh download (mặc định 2) để tránh chậm.
+    Chiến lược ưu tiên:
+    1. Playwright element.screenshot() — chụp ảnh trực tiếp từ DOM render,
+       KHÔNG qua CDN fetch → tránh hoàn toàn CORS/403 block của fbcdn.net
+    2. Fallback: JS fetch() với credentials (nếu screenshot thất bại)
+
+    Trả về list base64 data URL (data:image/png;base64,...).
+    max_images: giới hạn số ảnh (mặc định 2) để tránh chậm.
     """
+    import base64 as _b64
+    import sys
     results: list[str] = []
+
     for info in image_infos[:max_images]:
         src = info.get("src", "")
         if not src:
             continue
+
+        data_url: str | None = None
+
+        # ─── Chiến lược 1: Playwright element.screenshot() ───────────────────
+        # Chụp element trực tiếp từ browser render — không cần vượt CDN
         try:
-            data_url = page.evaluate(_JS_FETCH_IMAGE_AS_BASE64, src)
-            if data_url and isinstance(data_url, str) and data_url.startswith("data:image"):
-                results.append(data_url)
+            # Bước 1a: tìm <img> khớp src
+            el_handle = page.evaluate_handle(_JS_FIND_IMG_ELEMENT, src)
+            el = el_handle.as_element() if el_handle else None
+
+            # Bước 1b: fallback tìm div[role="img"] với background-image
+            if el is None:
+                # Lấy phần cuối của path (bỏ query params) làm fragment tìm kiếm
+                src_fragment = src.split("?")[0].rsplit("/", 1)[-1][:40]
+                if src_fragment:
+                    el_handle2 = page.evaluate_handle(_JS_FIND_DIV_IMG_ELEMENT, src_fragment)
+                    el = el_handle2.as_element() if el_handle2 else None
+
+            if el is not None:
+                # Scroll element vào viewport nếu cần
+                try:
+                    el.scroll_into_view_if_needed(timeout=1500)
+                    time.sleep(0.2)
+                except Exception:
+                    pass
+                # Chụp screenshot của element (bytes PNG)
+                screenshot_bytes = el.screenshot(timeout=4000)
+                if screenshot_bytes and len(screenshot_bytes) > 500:
+                    b64 = _b64.b64encode(screenshot_bytes).decode("utf-8")
+                    data_url = f"data:image/png;base64,{b64}"
         except Exception as exc:
-            import sys
-            print(f"[fb_scraper] download image error for {src[:60]}: {exc}", file=sys.stderr)
+            print(f"[fb_scraper] screenshot error for {src[:60]}: {exc}", file=sys.stderr)
+
+        # ─── Chiến lược 2: Fallback JS fetch() ───────────────────────────────
+        if data_url is None:
+            try:
+                result = page.evaluate(_JS_FETCH_IMAGE_AS_BASE64, src)
+                if result and isinstance(result, str) and result.startswith("data:image"):
+                    data_url = result
+            except Exception as exc:
+                print(f"[fb_scraper] fetch fallback error for {src[:60]}: {exc}", file=sys.stderr)
+
+        if data_url:
+            results.append(data_url)
+
     return results
 

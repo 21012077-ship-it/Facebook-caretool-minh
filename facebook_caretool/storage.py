@@ -91,6 +91,7 @@ class SQLiteStorage:
                 "proxy_action_locked_until": "TEXT",
                 "care_profile": "TEXT",
                 "care_plan_note": "TEXT",
+                "views_count": "TEXT",
             }.items():
                 if column not in existing_columns:
                     conn.execute(f"ALTER TABLE accounts ADD COLUMN {column} {definition}")
@@ -128,12 +129,12 @@ class SQLiteStorage:
                   (name, uid, password, two_fa, status, note, proxy,
                    proxy_changed_at, proxy_action_locked_until,
                    cookie_file, created_at, last_open, last_care,
-                   care_profile, care_plan_note)
+                   care_profile, care_plan_note, views_count)
                 VALUES
                   (:name, :uid, :password, :two_fa, :status, :note, :proxy,
                    :proxy_changed_at, :proxy_action_locked_until,
                    :cookie_file, :created_at, :last_open, :last_care,
-                   :care_profile, :care_plan_note)
+                   :care_profile, :care_plan_note, :views_count)
                 """,
                 clean_accounts,
             )

@@ -2,7 +2,11 @@
     "appearance": "dark",
     "default_home_url": "https://www.facebook.com/",
     "export_sensitive_default": false,
-    "import_overwrite_default": false,
+    "import_overwrite_default": true,
     "comment_content": "",
-    "ai_comment_enabled": true
+    "ai_comment_enabled": true,
+    "chatgpt_profile_dir": "chatgpt_profile",
+    "ai_provider": "groq",
+    "ai_api_key": "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",
+    "ai_model": "llama-3.1-8b-instant"
 }

@@ -93,8 +93,7 @@ def _make_gemini(api_key: str, model: str) -> Callable:
                 ),
             )
             candidate = clean_ai_response(response.text or "")
-            ok, _ = validate_ai_comment(candidate)
-            return candidate if ok else None
+            return candidate
         except Exception as exc:
             print(f"[Gemini] Lỗi tạo comment: {exc}")
             return None
@@ -110,15 +109,61 @@ def _make_gemini(api_key: str, model: str) -> Callable:
 # Model vision của Groq (nhanh, miễn phí) — dùng khi có ảnh
 _GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview"
 _GROQ_SYSTEM_PROMPT = (
-    "Bạn là người Việt Nam Gen Z hay comment Facebook. "
-    "Viết đúng 1 câu, ngắn (5-20 từ), rất tự nhiên như chat thật. "
-    "Tiếng Việt CÓ DẤU đầy đủ, có thể viết tắt: ko, ma, nha, lun, :)), 😭. "
-    "TUYỆT ĐỐI KHÔNG viết tiếng Việt không dấu (teen code/Viet Lat). "
-    "Ví dụ SAI: 'Nhung khi mua oto' → phải viết: 'Nhưng khi mua ôtô'. "
-    "KHÔNG dùng: 'Cảm ơn bạn', 'Tôi nghĩ', 'Rất đồng ý', 'Theo tôi'. "
-    "KHÔNG giải thích, KHÔNG tiền tố, KHÔNG dấu ngoặc kép. "
-    "Chỉ trả về đúng 1 dòng text là câu comment/reply đó thôi."
+    "Bạn là người Việt Nam 20 tuổi, hay lướt Facebook và bình luận rất tự nhiên như người thật.\n"
+    "\n"
+    "Nhiệm vụ: đọc nội dung bài viết, mô tả ảnh và comment cần phản hồi, viết đúng 1 bình luận phù hợp nhất.\n"
+    "\n"
+    "=== QUY ĐỊNH BẮT BUỘC ===\n"
+    "- Chỉ trả về đúng 1 câu comment ngắn, KHÔNG giải thích, KHÔNG tiêu đề, KHÔNG xuống dòng.\n"
+    "- Viết tiếng Việt CÓ DẤU đầy đủ, không viết tắt khó đọc.\n"
+    "- Comment từ 7–20 từ, phải là CÂU HOÀN CHỈNH CÓ ĐỦ CHỦ VỊ, không bị cắt giữa câu.\n"
+    "- Câu không được kết thúc bằng từ lửng như: 'ai', 'gì', 'nào', 'là', 'mà', 'vì' (trừ khi có dấu ?).\n"
+    "- Văn phong Gen Z tự nhiên, bám SÁT ngữ cảnh bài, không nói chung chung.\n"
+    "- Tối đa 1 emoji nếu thật sự hợp ngữ cảnh.\n"
+    "- KHÔNG bịa thêm số liệu, con số, tên người, sự kiện không có trong bài viết.\n"
+    "- KHÔNG bắt đầu bằng 'Hãy...', 'Chúc...', 'Thật tuyệt...' — nghe rất giả tạo và máy móc.\n"
+    "\n"
+    "=== CẤM TUYỆT ĐỐI (VI PHẠM = THẤT BẠI) ===\n"
+    "- CẤM bắt đầu bằng: 'Mình nghĩ', 'Tôi nghĩ', 'Theo tôi', 'Tôi cũng', 'Tôi thấy'.\n"
+    "- CẤM nói về hành động comment/bình luận: 'Không cần comment gì đâu', 'Không biết comment gì'.\n"
+    "- CẤM giả vờ là người trong bài: 'Mình cũng đang thử việc', 'Tao cũng gặp tình huống đó'.\n"
+    "- CẤM hiểu sai chủ thể: bài về anh chàng → KHÔNG được comment về 'cô bé', 'em bé'.\n"
+    "- CẤM câu chung chung: 'Hay quá', 'Chuẩn luôn', 'Đúng thật', 'Hóng tiếp', 'Thật tuyệt vời'.\n"
+    "- CẤM từ văn mẫu: 'Cảm ơn bạn', 'Rất đồng ý', 'Theo quan điểm của tôi'.\n"
+    "- CẤM quảng cáo, gắn link, rủ inbox, câu kéo like/share.\n"
+    "- CẤM công kích cá nhân, gây war, phân biệt vùng miền.\n"
+    "\n"
+    "=== KHI NÀO TRẢ VỀ SKIP_COMMENT ===\n"
+    "Trả về đúng 1 từ 'SKIP_COMMENT' (không có gì khác) khi bài viết thuộc loại:\n"
+    "- QUAN TRỌNG — Tôn giáo: bài có từ 'Chúa', 'Amen', 'Abba', 'Chúa Giêsu', 'cầu nguyện', 'Phật', \n"
+    "  'tín ngưỡng', 'kinh thánh', 'lễ nhà thờ' → BẮT BUỘC SKIP_COMMENT, KHÔNG được comment.\n"
+    "- Tiêu cực: tai nạn, tử vong, bệnh tật, đám tang, tin buồn.\n"
+    "- Nhạy cảm: chính trị, pháp luật, chiến tranh, tranh cãi gay gắt.\n"
+    "- Độc hại: lừa đảo, đa cấp, cờ bạc, nội dung 18+.\n"
+    "- Dữ liệu bị lỗi, rác, không rõ nghĩa.\n"
+    "\n"
+    "=== VÍ DỤ ĐÚNG / SAI ===\n"
+    "Bài về ai đó trông giống người nổi tiếng:\n"
+    "  ❌ SAI: Cô bé này quá ghê, thật giống với bố mẹ :))\n"
+    "  ✅ ĐÚNG: Pha giống này chuẩn không cần chỉnh, nhìn là biết liền rồi :))\n"
+    "Bài về deadline / áp lực công việc:\n"
+    "  ❌ SAI: Mình thấy thật khum khi deadline quá ngắn!\n"
+    "  ✅ ĐÚNG: Deadline nó không phải bạn, mà là kẻ thù không đội trời chung 😭\n"
+    "Bài về xe bị hỏng lốp:\n"
+    "  ❌ SAI: Lốc xoay 12 lốp trong chặng đường dài ấy ạ. (bịa số liệu)\n"
+    "  ✅ ĐÚNG: Bến đỗ này không hiền với lốp xe tí nào luôn 😂\n"
+    "Bài cầu nguyện Chúa / Amen:\n"
+    "  ❌ SAI: Đúng rồi, con tin tưởng anh sẽ giúp. (comment vào bài tôn giáo)\n"
+    "  ✅ ĐÚNG: SKIP_COMMENT\n"
+    "Bài về mẹ không nhường (hài hước gia đình):\n"
+    "  ❌ SAI: Bố mẹ nó không biết nhường ai, con cũng nhường ai 😂 (câu lửng)\n"
+    "  ✅ ĐÚNG: gen nhà mình là thế rồi, không ai chịu nhường ai cả 😂\n"
+    "Bài xin gối ôm / fan hâm mộ:\n"
+    "  ❌ SAI: Chuẩn rồi, ai ngờ anh lại lười đến thế 😅 (sai ngữ cảnh)\n"
+    "  ✅ ĐÚNG: Day 135 rồi vẫn chưa được gối ôm, kiên trì thật sự 😭\n"
+    "Ưu tiên xưng hô: mình, ông, bà, ae, bác, tui. Hoặc không xưng gì cũng được."
 )
+
 
 
 def _make_groq(api_key: str, model: str) -> Callable:
@@ -162,8 +207,7 @@ def _make_groq(api_key: str, model: str) -> Callable:
                 max_tokens=100,
             )
             candidate = clean_ai_response(response.choices[0].message.content or "")
-            ok, _ = validate_ai_comment(candidate)
-            return candidate if ok else None
+            return candidate
         except Exception as exc:
             err = str(exc)
             print(f"[Groq] Lỗi tạo comment (model={active_model}): {err}")
@@ -180,8 +224,7 @@ def _make_groq(api_key: str, model: str) -> Callable:
                         max_tokens=100,
                     )
                     candidate2 = clean_ai_response(response2.choices[0].message.content or "")
-                    ok2, _ = validate_ai_comment(candidate2)
-                    return candidate2 if ok2 else None
+                    return candidate2
                 except Exception:
                     pass
             return None
@@ -224,8 +267,7 @@ def _make_openrouter(api_key: str, model: str) -> Callable:
                 max_tokens=100,
             )
             candidate = clean_ai_response(response.choices[0].message.content or "")
-            ok, _ = validate_ai_comment(candidate)
-            return candidate if ok else None
+            return candidate
         except Exception as exc:
             print(f"[OpenRouter] Lỗi tạo comment: {exc}")
             return None
@@ -273,8 +315,7 @@ def _make_ollama(model: str, base_url: str = "http://localhost:11434") -> Callab
             )
             response.raise_for_status()
             candidate = clean_ai_response(response.json().get("response") or "")
-            ok, _ = validate_ai_comment(candidate)
-            return candidate if ok else None
+            return candidate
         except Exception as exc:
             print(f"[Ollama] Lỗi tạo comment: {exc}")
             return None

@@ -242,14 +242,37 @@ class AutomationService:
         launch_options: Dict[str, Any] = {
             "channel": "chrome",
             "headless": False,
-            # Giảm slow_mo từ 200ms xuống 80ms → thao tác nhanh hơn
-            "slow_mo": 80,
+            "slow_mo": 30,
             "args": [
                 "--disable-extensions",
                 "--disable-features=Translate",
                 "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
                 "--ignore-certificate-errors",
+                # Giảm lag proxy
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--metrics-recording-only",
+                "--no-first-run",
+                # ➡ Giảm CPU mạnh: tắt GPU rendering (dùng software rasterizer nhẹ hơn)
+                "--disable-gpu",
+                "--disable-gpu-compositing",
+                # "--disable-software-rasterizer", # Removed because it can cause crashes when GPU is also disabled
+                # Tắt WebGL và hiệu ứng 3D — Facebook không cần
+                "--disable-webgl",
+                "--disable-webgl2",
+                # Tắt các render worker nguồn CPU nguồn
+                "--disable-accelerated-2d-canvas",
+                "--disable-accelerated-jpeg-decoding",
+                "--disable-accelerated-video-decode",
+                # Tắt các tính năng hạt nhân nặng không cần thiết
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--disable-ipc-flooding-protection",
+                # Giảm process
+                "--process-per-site",
+                "--disable-hang-monitor",
             ],
         }
         if proxy_config:
@@ -258,36 +281,42 @@ class AutomationService:
         browser = playwright.chromium.launch(**launch_options)
         try:
             context = browser.new_context(
-                viewport={"width": 1280, "height": 800},
+                viewport={"width": 900, "height": 650},  # nhỏ hơn = ít pixel render hơn
                 user_agent=random.choice(self.user_agents),
+                # Tắt animation/transition — giảm JS timer và paint cycle của Facebook
+                reduced_motion="reduce",
             )
             if cookies:
                 context.add_cookies(cookies)
             page = context.new_page()
 
-            # Chặn font + tracker → load nhanh hơn 20-40% (giống index.js optimizePagePerformance)
+            # Chặn resource nặng qua proxy: font, tracker, media, stylesheet không cần thiết
+            _BLOCKED_RESOURCE_TYPES = {"font", "media"}
             _BLOCKED_DOMAINS = (
                 "fonts.googleapis.com", "fonts.gstatic.com",
                 "connect.facebook.net/signals", "pixel.facebook.com",
                 "analytics.facebook.com", "graph.facebook.com/logging",
+                "graph.facebook.com/logger",
+                "www.google-analytics.com",
             )
             def _route_handler(route):
-                req = route.request
-                rtype = req.resource_type
-                url = req.url
-                # Chặn font
-                if rtype == "font":
-                    route.abort()
-                    return
-                # Chặn tracker/analytics Facebook (không ảnh hưởng chức năng)
-                if any(d in url for d in _BLOCKED_DOMAINS):
-                    route.abort()
-                    return
-                route.continue_()
+                try:
+                    req = route.request
+                    rtype = req.resource_type
+                    url = req.url
+                    if rtype in _BLOCKED_RESOURCE_TYPES:
+                        route.abort()
+                        return
+                    if any(d in url for d in _BLOCKED_DOMAINS):
+                        route.abort()
+                        return
+                    route.continue_()
+                except Exception:
+                    pass
 
             page.route("**/*", _route_handler)
 
-            # Default timeout 30s (thay vì Playwright default 30s không thay đổi được)
+            # Timeout 30s — đủ cho proxy; 15s có thể làm nhiều selector time out giữa trang
             page.set_default_timeout(30000)
 
             apply_playwright_stealth(page)
