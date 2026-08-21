@@ -16,10 +16,12 @@ account.json
 logs.json
 cookies.json
 cookies/
+chatgpt_cookies.json
 fb_profiles/
 caretool.db
 backups/
 exports/
+settings.json
 *.sqlite
 *.sqlite3
 
